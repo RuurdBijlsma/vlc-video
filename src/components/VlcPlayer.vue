@@ -44,7 +44,7 @@ export default {
     },
     methods: {
         loadSrc() {
-            const url = 'http://localhost:3000/filetest';
+            const url = 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
             this.player = chimera.createPlayer();
             let canvas = document.querySelector(".canvas");
 
