@@ -13,13 +13,15 @@
   "main": "background.js",
   "dependencies": {
     "core-js": "^3.6.5",
-    "vue": "^2.6.11"
+    "vue": "^2.6.11",
+    "wrap-chimera": "github:RuurdBijlsma/wrap-chimera"
   },
   "devDependencies": {
     "@vue/cli-plugin-babel": "~4.5.0",
     "@vue/cli-service": "~4.5.0",
     "electron": "11.1.0",
     "electron-devtools-installer": "^3.1.0",
+    "node-loader": "^1.0.2",
     "vue-cli-plugin-electron-builder": "~2.0.0-rc.5",
     "vue-template-compiler": "^2.6.11"
   }
