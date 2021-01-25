@@ -13,6 +13,7 @@
   "main": "background.js",
   "dependencies": {
     "core-js": "^3.6.5",
+    "electron-context-menu": "^2.4.0",
     "vue": "^2.6.11",
     "wrap-chimera": "github:RuurdBijlsma/wrap-chimera"
   },
