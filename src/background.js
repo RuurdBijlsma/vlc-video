@@ -3,6 +3,7 @@
 import {app, protocol, BrowserWindow} from 'electron'
 import {createProtocol} from 'vue-cli-plugin-electron-builder/lib'
 import installExtension, {VUEJS_DEVTOOLS} from 'electron-devtools-installer'
+import path from "path";
 
 // import wc from 'node-loader!./js/WrapChimera/WebChimera.js.x64.node'
 // import wc2 from 'node-loader!./js/WrapChimera/CustomChimera.node'
@@ -17,9 +18,12 @@ protocol.registerSchemesAsPrivileged([
 
 async function createWindow() {
     // Create the browser window.
+    let icon = path.join(__static, process.env.WEBPACK_DEV_SERVER_URL ? 'icon/icon-dev.png' : 'icon/icon.png');
     const win = new BrowserWindow({
         width: 1400,
         height: 800,
+        backgroundColor: '#201e21',
+        icon,
         webPreferences: {
             enableRemoteModule: true,
             // Use pluginOptions.nodeIntegration, leave this alone
