@@ -46,6 +46,8 @@
 
 <script>
 // TODO
+// dont fire scroll event on media information
+
 // copy entire api from HtmlVideoElement for this
 // https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement
 // https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement
@@ -56,6 +58,7 @@
 
 import {chimera, enums} from 'wrap-chimera'
 import contextMenu from "electron-context-menu";
+import path from 'path'
 
 export default {
     name: "VlcPlayer",
@@ -464,21 +467,21 @@ export default {
         },
     },
     computed: {
-        currentTime:{
+        currentTime: {
             cache: false,
-            get(){
+            get() {
                 return this.player.time / 1000;
             },
         },
-        videoWidth:{
+        videoWidth: {
             cache: false,
-            get(){
+            get() {
                 return this.player.input.width;
             },
         },
-        videoHeight:{
+        videoHeight: {
             cache: false,
-            get(){
+            get() {
                 return this.player.input.height;
             },
         },
@@ -502,7 +505,7 @@ export default {
             return this.player.input.width / this.player.input.height;
         },
         menuIconPath() {
-            return `public/menu-icons/${this.dark ? 'white' : 'black'}/`
+            return path.join(__static, `/menu-icons/${this.dark ? 'white' : 'black'}/`);
         },
     },
     watch: {

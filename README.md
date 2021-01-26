@@ -1,4 +1,5 @@
-# vue-test-3
+# vue-vlc-player
+VLC Player component for Vue/Electron
 
 ## Project setup
 ```

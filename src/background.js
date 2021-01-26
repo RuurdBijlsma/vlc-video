@@ -5,7 +5,7 @@ import {createProtocol} from 'vue-cli-plugin-electron-builder/lib'
 import installExtension, {VUEJS_DEVTOOLS} from 'electron-devtools-installer'
 import path from "path";
 
-// import wc from 'node-loader!./js/WrapChimera/WebChimera.js.x64.node'
+// import wc from 'wcjs-prebuilt'
 // import wc2 from 'node-loader!./js/WrapChimera/CustomChimera.node'
 
 // console.log(wc)

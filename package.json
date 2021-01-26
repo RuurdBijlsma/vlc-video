@@ -1,7 +1,9 @@
 {
   "name": "vue-test-3",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
+  "author": "Ruurd Bijlsma <ruurd@bijlsma.dev>",
+  "description": "VLC Player component for Vue/Electron",
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
@@ -15,6 +17,7 @@
     "core-js": "^3.6.5",
     "electron-context-menu": "^2.4.0",
     "vue": "^2.6.11",
+    "wcjs-prebuilt": "github:RuurdBijlsma/wcjs-prebuilt",
     "wrap-chimera": "github:RuurdBijlsma/wrap-chimera"
   },
   "devDependencies": {
