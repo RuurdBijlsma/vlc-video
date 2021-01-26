@@ -1,6 +1,6 @@
 {
   "name": "vue-test-3",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "author": "Ruurd Bijlsma <ruurd@bijlsma.dev>",
   "description": "VLC Player component for Vue/Electron",
