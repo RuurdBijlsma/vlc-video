@@ -9,8 +9,8 @@ module.exports = {
             builderOptions: {
                 publish: ['github'],
                 artifactName: "${productName} Setup.${ext}",
-                appId: "dev.ruurd.moviemaker",
-                productName: "Ruurd Movie Maker",
+                appId: "dev.ruurd.vuevlc",
+                productName: "Vue VLC Player",
             },
         }
     },
