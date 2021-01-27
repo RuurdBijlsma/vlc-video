@@ -100,7 +100,7 @@
 // copy entire api from HtmlVideoElement for this
 // https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement
 // https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement
-// Ik ben bij events
+// Inherited members are still required
 
 // Fix setting src to ''
 // figure out audio device switching
@@ -240,16 +240,25 @@ export default {
     },
     methods: {
         init() {
+            let firstPlay = true, firstPause = true;
             this.player = chimera.createPlayer();
             this.player.bindCanvas(this.$refs.canvas);
             console.log('init vlc player', chimera, this.player);
 
             this.player.on('play', () => {
                 this.paused = false;
+                if (firstPlay) {
+                    firstPlay = false;
+                    this.$emit('play');
+                }
                 this.showStatusText('▶')
             });
             this.player.on('pause', () => {
                 this.paused = true;
+                if (firstPause) {
+                    firstPause = false;
+                    this.$emit('pause');
+                }
                 this.showStatusText('⏸')
             });
             this.player.on('stop', () => {
@@ -266,13 +275,19 @@ export default {
             });
             this.player.on('volumeChange', v => {
                 this.volume = v / 100;
+                this.$emit('volumechange', v / 100);
                 this.showStatusText(`${this.player.mute ? '🔇' : '🔊'} ${Math.round(v)}%`)
             });
             this.player.input.on('rateChange', v => {
                 this.playbackRate = v;
+                this.$emit('ratechange', v);
                 this.showStatusText(`🐢 ${v.toFixed(2)}x`)
             });
-            this.player.on('seek', () => this.showStatusText(`${this.msToTime(this.player.time)} / ${this.msToTime(this.player.duration)}`));
+            this.player.on('seek', () => {
+                this.$emit('seeking');
+                this.$emit('seeked');
+                this.showStatusText(`${this.msToTime(this.player.time)} / ${this.msToTime(this.player.duration)}`)
+            });
             this.player.on('load', () => {
                 this.videoResize();
 
@@ -286,6 +301,7 @@ export default {
             this.player.on('time', () => {
                 this.dontWatchTime = true;
                 this.currentTime = this.player.time / 1000
+                this.$emit('timeupdate', this.currentTime);
             });
             this.player.on('ended', () => {
                 if (this.loop) {
@@ -300,14 +316,23 @@ export default {
                 }
             });
 
+            this.player.on('durationChange', duration => {
+                console.log('durationchange', duration);
+                this.$emit('durationchange', duration / 1000);
+                this.duration = duration / 1000;
+            });
+
             this.player.on('error', err => {
                 this.error = 'VLC error' + err;
+                this.$emit('stalled');
                 this.$emit('error', ['VLC error', err]);
             });
 
             this.player.on('seekable', (v) => console.log('seekable change', v));
 
             this.player.on('mediaChange', () => {
+                firstPlay = true;
+                firstPause = true;
                 let onStateChange = newState => {
                     if (newState === 'play' || newState === 'pause') {
                         this.player.off('stateChange', onStateChange);
@@ -329,7 +354,12 @@ export default {
                 this.player.on('stateChange', onStateChange);
             });
 
+            let prevState = this.player.state;
             this.player.on('stateChange', newState => {
+                if (prevState === 'buffering' && newState === 'play') {
+                    this.$emit('playing');
+                }
+                prevState = newState;
                 console.log('New state: ', newState);
                 if (newState === 'buffering')
                     this.showBuffering();
@@ -338,6 +368,7 @@ export default {
             this.loadSrc();
         },
         showBuffering() {
+            this.$emit('waiting');
             clearTimeout(this.showBufferTimeout);
             this.buffering = true;
             this.showBufferTimeout = setTimeout(() => {
@@ -720,6 +751,7 @@ export default {
             }
 
             this.player.playUrl(this.src);
+            this.$emit('loadstart');
         },
         videoResize() {
             this.videoWidth = this.player.video.width;
@@ -757,6 +789,11 @@ export default {
         },
         load() {
             // todo this doesnt work well
+            if (this.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
+                this.$emit('abort');
+            } else {
+                this.$emit('emptied');
+            }
             this.player.destroy();
             this.init();
         },
