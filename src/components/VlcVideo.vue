@@ -1,5 +1,5 @@
 <template>
-    <div class="vlc-player"
+    <div class="vlc-video"
          :style="{
              '--width': `${containerBounds.width}px`,
              '--height': `${containerBounds.height}px`,
@@ -14,9 +14,12 @@
         <div class="canvas-center" :style="{
             width: fullscreen ? '100%' : containerBounds.width + 'px',
             height: fullscreen ? '100%' : containerBounds.height + 'px',
+            backgroundImage: poster === '' ? 'none' : `url(${poster})`,
+            backgroundSize: coverPoster ? 'cover' : 'contain',
         }">
             <canvas
                 :style="{
+                    opacity: poster === '' || firstPlayLoaded ? 1 : 0,
                     width: canvasBounds.width + 'px',
                     height: canvasBounds.height + 'px',
                 }"
@@ -30,8 +33,8 @@
             height: '85px',
             top: bounds.top + containerBounds.height - 85 + 'px',
             left: bounds.left + 'px',
-            opacity: hideControls && !mouseOverControls && !paused ? 0 : readyState === 0 ? 0.5 : 1,
-            pointerEvents: readyState === 0 ? 'none' : 'all',
+            opacity: hideControls && !mouseOverControls && !paused ? 0 : readyState < 2 ? 0.5 : 1,
+            pointerEvents: readyState < 2 ? 'none' : 'all',
         }">
             <div class="controls-top">
                 <div class="controls-left">
@@ -114,8 +117,11 @@ import {chimera, enums} from 'wrap-chimera'
 import contextMenu from "electron-context-menu";
 import path from 'path'
 
+import {nativeImage} from "electron";
+
+
 export default {
-    name: "VlcPlayer",
+    name: "VlcVideo",
     props: {
         // ------- HTML Video properties -------- //
         autoplay: {
@@ -138,28 +144,36 @@ export default {
             type: [Number, String],
             default: 0,
         },
+        poster: {
+            type: String,
+            default: '',
+        },
+        loop: {
+            type: Boolean,
+            default: false,
+        },
         // ---------- Miscellaneous -------- //
+        coverPoster: {
+            type: Boolean,
+            default: false,
+        },
         dark: {
             type: Boolean,
             default: false,
         },
-        enableStatusText: {
+        enableStatus: {
             type: Boolean,
             default: false,
         },
-        disableContextMenu: {
+        enableContextMenu: {
             type: Boolean,
             default: false,
         },
-        disableScroll: {
+        enableScroll: {
             type: Boolean,
             default: false,
         },
-        disableKeys: {
-            type: Boolean,
-            default: false,
-        },
-        loop: {
+        enableKeys: {
             type: Boolean,
             default: false,
         },
@@ -187,6 +201,8 @@ export default {
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
         mouseOverControls: false,
+        icons: {},
+        firstPlayLoaded: false,
         // Video element properties //
         defaultPlaybackRate: 1,
         playbackRate: 1,
@@ -196,7 +212,7 @@ export default {
         readyState: HTMLMediaElement.HAVE_NOTHING,
         volume: 1,
         muted: false,
-        paused: false,
+        paused: true,
         currentTime: 0,
         controlsList: [],
         crossOrigin: '',
@@ -220,6 +236,13 @@ export default {
         document.removeEventListener('fullscreenchange', this.changeFullscreen);
     },
     async mounted() {
+        let icons = ['pause', 'play_arrow', 'stop', 'volume_up', 'volume_down', 'volume_off', 'volume_off', 'info', 'info'];
+        Promise.all(icons.map(this.nativeIcon))
+            .then(result => {
+                result.forEach((icon, i) => this.icons[icons[i]] = icon);
+                console.log(this.icons);
+            });
+
         this.init();
 
         this.interval = setInterval(() => {
@@ -247,8 +270,10 @@ export default {
 
             this.player.on('play', () => {
                 this.paused = false;
+                console.log("on play fired", firstPlay);
                 if (firstPlay) {
                     firstPlay = false;
+                } else {
                     this.$emit('play');
                 }
                 this.showStatusText('▶')
@@ -257,6 +282,7 @@ export default {
                 this.paused = true;
                 if (firstPause) {
                     firstPause = false;
+                } else {
                     this.$emit('pause');
                 }
                 this.showStatusText('⏸')
@@ -427,7 +453,7 @@ export default {
                     {
                         label: 'Pause',
                         accelerator: 'Space',
-                        icon: this.menuIconPath + 'pause.png',
+                        icon: this.icons['pause'],
                         visible: this.showContextMenu && this.player.playing,
                         click: () => {
                             this.player.pause();
@@ -436,16 +462,17 @@ export default {
                     {
                         label: 'Play',
                         accelerator: 'Space',
-                        icon: this.menuIconPath + 'play.png',
+                        icon: this.icons['play_arrow'],
                         visible: this.showContextMenu && !this.player.playing,
                         click: () => {
-                            this.player.play();
+                            if (this.src !== '')
+                                this.player.play();
                         }
                     },
                     {
                         label: 'Stop',
                         accelerator: 'MediaStop',
-                        icon: this.menuIconPath + 'stop.png',
+                        icon: this.icons['stop'],
                         visible: this.showContextMenu && this.player.state !== 'Stopped',
                         click: () => {
                             this.player.stop();
@@ -489,7 +516,7 @@ export default {
                             {
                                 label: 'Increase volume',
                                 accelerator: '=',
-                                icon: this.menuIconPath + 'volume_up.png',
+                                icon: this.icons['volume_up'],
                                 visible: this.showContextMenu,
                                 enabled: this.player.volume < 200,
                                 click: () => this.player.volume += 10
@@ -497,7 +524,7 @@ export default {
                             {
                                 label: 'Decrease volume',
                                 accelerator: '-',
-                                icon: this.menuIconPath + 'volume_down.png',
+                                icon: this.icons['volume_down'],
                                 visible: this.showContextMenu,
                                 enabled: this.player.volume > 0,
                                 click: () => this.player.volume -= 10
@@ -505,14 +532,14 @@ export default {
                             {
                                 label: 'Mute',
                                 accelerator: 'm',
-                                icon: this.menuIconPath + 'volume_off.png',
+                                icon: this.icons['volume_off'],
                                 visible: this.showContextMenu && !this.player.mute,
                                 click: () => this.player.mute = true
                             },
                             {
                                 label: 'Unmute',
                                 accelerator: 'm',
-                                icon: this.menuIconPath + 'volume_off.png',
+                                icon: this.icons['volume_off'],
                                 visible: this.showContextMenu && this.player.mute,
                                 click: () => this.player.mute = false
                             },
@@ -536,6 +563,7 @@ export default {
                             {
                                 label: "Fullscreen",
                                 type: 'checkbox',
+                                enabled: !this.controlsList.includes('nofullscreen'),
                                 checked: this.fullscreen,
                                 click: () => this.toggleFullscreen(),
                             },
@@ -627,7 +655,7 @@ export default {
                         submenu: [
                             {
                                 label: 'Media information',
-                                icon: this.menuIconPath + 'media_info.png',
+                                icon: this.icons['info'],
                                 click: () => {
                                     this.showInformation = true;
                                     let media = this.player.playlist.items[0];
@@ -635,11 +663,13 @@ export default {
                                         this.informationContent = 'No info';
                                     else {
                                         let text = '';
-                                        let properties = ['mrl', 'duration', 'title', 'artist', 'genre', 'copyright', 'album', 'trackNumber',
+                                        let properties = ['title', 'mrl', 'duration', 'artist', 'genre', 'copyright', 'album', 'trackNumber',
                                             'description', 'rating', 'date', 'URL', 'language',
                                             'nowPlaying', 'publisher', 'encodedBy', 'artworkURL', 'trackID']
                                         for (let key of properties) {
                                             let value = media[key];
+                                            if (key === 'duration')
+                                                value = this.msToTime(value);
                                             text += `<div><b>${key}: </b>${value}</div>`;
                                         }
                                         this.informationContent = text;
@@ -649,7 +679,7 @@ export default {
                             // No codec info available
                             // {
                             //     label: 'Codec information',
-                            //     icon: this.menuIconPath + 'info.png',
+                            //     icon: this.icons['info'],
                             //     click: () => {
                             //         console.warn("not impolemented")
                             //     },
@@ -736,6 +766,8 @@ export default {
             }, timeout);
         },
         loadSrc() {
+            this.player.stop();
+
             this.preventStatusUpdate = true;
             this.duration = NaN;
             this.ended = false;
@@ -745,12 +777,17 @@ export default {
             this.videoHeight = 0;
             this.currentTime = 0;
             this.error = null;
+            this.firstPlayLoaded = false;
 
             if (this.src === '') {
                 this.networkState = HTMLMediaElement.NETWORK_NO_SOURCE;
             }
 
             this.player.playUrl(this.src);
+            this.$on('play', () => {
+                this.firstPlayLoaded = true
+                console.log('firstplay loaded');
+            });
             this.$emit('loadstart');
         },
         videoResize() {
@@ -774,6 +811,52 @@ export default {
         iconUrl(icon) {
             return `https://fonts.gstatic.com/s/i/materialicons/${icon}/v6/24px.svg?download=true`;
         },
+        async nativeIcon(icon) {
+            return await this.nativeImage(this.iconUrl(icon));
+        },
+        async nativeImage(url, dark = this.dark) {
+            if (!nativeImage.cache)
+                nativeImage.cache = {};
+            if (!nativeImage.cache[url]) {
+                let {black, white} = await this.getSvgIcon(url);
+                nativeImage.cache[url] = {
+                    black: nativeImage.createFromDataURL(black),
+                    white: nativeImage.createFromDataURL(white)
+                };
+            }
+            return nativeImage.cache[url][dark ? 'white' : 'black'];
+        },
+        /**
+         * @param url
+         * @param {int} width
+         * @param {int} height
+         * @returns {Promise<string>}
+         */
+        async getSvgIcon(url, width = 18, height = 18) {
+            return new Promise((resolve, reject) => {
+                let img = new Image();
+                img.src = url;
+                img.crossOrigin = "anonymous";
+                img.onload = () => {
+                    let canvas = document.createElement('canvas');
+                    let context = canvas.getContext('2d');
+                    canvas.width = width;
+                    canvas.height = height;
+                    context.drawImage(img, 0, 0, width, height);
+                    let black = canvas.toDataURL();
+                    let imgData = context.getImageData(0, 0, img.width, img.height);
+                    for (let i = 0; i < imgData.data.length; i += 4) {
+                        imgData.data[i] = 255 - imgData.data[i];
+                        imgData.data[i + 1] = 255 - imgData.data[i + 1];
+                        imgData.data[i + 2] = 255 - imgData.data[i + 2];
+                    }
+                    context.putImageData(imgData, 0, 0);
+                    let white = canvas.toDataURL();
+                    resolve({black, white});
+                }
+                img.onerror = reject;
+            })
+        },
         // ------------ HTMLVideoElement methods ---------- //
         addTextTrack(filePath) {
             this.player.subtitles.load(filePath);
@@ -781,7 +864,7 @@ export default {
         captureStream() {
             console.warn("Not implemented");
         },
-        canPlayType(mediaType) {
+        canPlayType() {
             return 'probably';
         },
         fastSeek(t) {
@@ -798,6 +881,8 @@ export default {
             this.init();
         },
         async play() {
+            if (this.src === '')
+                return;
             this.player.play();
             if (this.player.state === 'Playing')
                 return;
@@ -825,7 +910,7 @@ export default {
                     },
                     set enabled(v) {
                         if (v) audio.track = i + 1
-                        else audio.track = 0
+                        else if (audio.track === i + 1) audio.track = 0
                     },
                     id: i,
                     kind: i === 0 ? 'main' : 'alternative',
@@ -845,7 +930,7 @@ export default {
                     },
                     set enabled(v) {
                         if (v) subtitles.track = i + 1
-                        else subtitles.track = 0
+                        else if (subtitles.track === i + 1) subtitles.track = 0
                     },
                     id: i,
                     kind: i === 0 ? 'main' : 'alternative',
@@ -865,7 +950,7 @@ export default {
                     },
                     set selected(v) {
                         if (v) video.track = i + 1
-                        else video.track = 0
+                        else if (video.track === i + 1) video.track = 0
                     },
                     id: i,
                     kind: i === 0 ? 'main' : 'alternative',
@@ -992,17 +1077,20 @@ export default {
 </script>
 
 <style scoped>
-.vlc-player {
+.vlc-video {
     display: inline-block;
     --width: 1px;
     --height: 1px;
 }
 
-.vlc-player:focus {
+.vlc-video:focus {
     outline: none;
 }
 
 .canvas-center {
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
     width: 100%;
     height: 100%;
     display: flex;

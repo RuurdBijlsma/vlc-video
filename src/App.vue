@@ -1,19 +1,18 @@
 <template>
     <div id="app">
-        <h1>Player</h1>
-        <!--        <vlc-player controls dark src="http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"/>-->
-        <vlc-player loop controls width="500" ref="player" class="player" dark src="http://localhost:3000/filetest"/>
-        <video controls width="500" class="player" src="http://localhost:3000/filetest"/>
-        <p>controls</p>
+        <h1>Vlc Video</h1>
+        <vlc-video height="300" controls ref="player" class="player" dark src="http://localhost:3000/filetest"/>
+        <h1>HTML Video</h1>
+        <video height="300" controls class="player" src="http://localhost:3000/filetest"/>
     </div>
 </template>
 
 <script>
-import VlcPlayer from "@/components/VlcPlayer";
+import VlcVideo from "@/components/VlcVideo";
 
 export default {
     name: 'App',
-    components: {VlcPlayer},
+    components: {VlcVideo},
     mounted() {
         console.log(this.$refs.player);
     },
@@ -22,6 +21,7 @@ export default {
 
 <style>
 #app {
+    /*background-color: lime;*/
     font-family: Avenir, Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -32,6 +32,6 @@ export default {
 
 .player {
     /*width: calc(100% - 200px);*/
-    /*height: 300px;*/
+    height: 300px;
 }
 </style>
