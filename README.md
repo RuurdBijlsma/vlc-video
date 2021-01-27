@@ -24,6 +24,7 @@ This component was made to work as similarly to `<video>` as possible, when `con
   * `dark` enables dark theme (only for the context menu icons)
 
 ## Biggest differences with `<video>`
+* For now only works on Windows x64 as far as I know
 * This is a Vue component
 * libvlc doesn't expose what sections are buffered as far as I know, so the `.buffered` member returns that everything is buffered.
 * `.canPlayType(mediaType)` always returns `'probably'`
