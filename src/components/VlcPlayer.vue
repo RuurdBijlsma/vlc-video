@@ -1,11 +1,11 @@
 <template>
     <div class="vlc-player"
-         @mousemove="moveOverPlayer"
          :style="{
              '--width': `${containerBounds.width}px`,
              '--height': `${containerBounds.height}px`,
-             cursor: hideControls && !paused ? 'none' : 'auto',
+             cursor: hideControls && !mouseOverControls && !paused ? 'none' : 'auto',
          }"
+         @mousemove="moveOverPlayer"
          ref="player"
          @click.right="showContext"
          @keydown="handleKey"
@@ -24,12 +24,14 @@
                 ref="canvas"
             />
         </div>
-        <div class="controls" v-if="controls && bounds" :style="{
+        <div class="controls" @mouseenter="mouseOverControls=true" @mouseleave="mouseOverControls=false"
+             v-if="controls && bounds" :style="{
             width: containerBounds.width + 'px',
             height: '85px',
             top: bounds.top + containerBounds.height - 85 + 'px',
             left: bounds.left + 'px',
-            opacity: hideControls && !paused ? 0 : 1,
+            opacity: hideControls && !mouseOverControls && !paused ? 0 : readyState === 0 ? 0.5 : 1,
+            pointerEvents: readyState === 0 ? 'none' : 'all',
         }">
             <div class="controls-top">
                 <div class="controls-left">
@@ -56,6 +58,7 @@
                         width: Math.round(position * 10000) / 100 + '%',
                     }"></div>
                     <div class="seek-thumb" :style="{
+                        opacity: mouseOverControls ? 1 : 0,
                         left: `calc(${Math.round(position * 10000) / 100}% - 6px)`,
                     }"></div>
                 </div>
@@ -97,7 +100,7 @@
 // copy entire api from HtmlVideoElement for this
 // https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement
 // https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement
-// Ik ben bij HTMLMediaElement.seekable
+// Ik ben bij events
 
 // Fix setting src to ''
 // figure out audio device switching
@@ -183,6 +186,7 @@ export default {
         fullscreen: false,
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
+        mouseOverControls: false,
         // Video element properties //
         defaultPlaybackRate: 1,
         playbackRate: 1,
@@ -200,6 +204,8 @@ export default {
         ended: false,
         error: null,
         networkState: HTMLMediaElement.NETWORK_EMPTY,
+        seeking: false,
+        srcObject: null,
     }),
     beforeDestroy() {
         clearInterval(this.interval);
@@ -214,97 +220,7 @@ export default {
         document.removeEventListener('fullscreenchange', this.changeFullscreen);
     },
     async mounted() {
-        this.player = chimera.createPlayer();
-        this.player.on('play', () => {
-            this.paused = false;
-            this.showStatusText('▶')
-        });
-        this.player.on('pause', () => {
-            this.paused = true;
-            this.showStatusText('⏸')
-        });
-        this.player.on('stop', () => {
-            this.paused = true;
-            this.showStatusText('⏹')
-        });
-        this.player.on('mute', () => {
-            this.muted = true;
-            this.showStatusText('🔇')
-        });
-        this.player.on('unmute', () => {
-            this.muted = false;
-            this.showStatusText(`🔊 ${Math.round(this.player.volume)}%`)
-        });
-        this.player.on('volumeChange', v => {
-            this.volume = v / 100;
-            this.showStatusText(`${this.player.mute ? '🔇' : '🔊'} ${Math.round(v)}%`)
-        });
-        this.player.input.on('rateChange', v => {
-            this.playbackRate = v;
-            this.showStatusText(`🐢 ${v.toFixed(2)}x`)
-        });
-        this.player.on('seek', () => this.showStatusText(`${this.msToTime(this.player.time)} / ${this.msToTime(this.player.duration)}`));
-        this.player.on('load', () => {
-            this.videoResize();
-
-            this.readyState = HTMLMediaElement.HAVE_CURRENT_DATA;
-            this.duration = this.player.duration / 1000;
-
-            this.$emit('loadedmetadata');
-            this.$emit('loadeddata');
-            console.log('loadeddata', this.player.duration);
-        });
-        this.player.on('time', () => {
-            this.dontWatchTime = true;
-            this.currentTime = this.player.time / 1000
-        });
-        this.player.on('ended', () => {
-            if (this.loop) {
-                this.currentTime = 0;
-                this.player.once('stop', () => {
-                    this.player.play();
-                    this.player.once('pause', this.player.play);
-                });
-            } else {
-                this.$emit('ended');
-                this.ended = true;
-            }
-        });
-
-        this.player.on('error', err => {
-            this.error = 'VLC error' + err;
-            this.$emit('error', ['VLC error', err]);
-        });
-
-        this.player.on('seekable', () => console.log('seekable change'));
-
-        this.player.on('mediaChange', () => {
-            let onStateChange = newState => {
-                if (newState === 'play' || newState === 'pause') {
-                    this.player.off('stateChange', onStateChange);
-                    this.readyState = HTMLMediaElement.HAVE_FUTURE_DATA;
-                    this.$emit('canplay');
-                    this.readyState = HTMLMediaElement.HAVE_ENOUGH_DATA;
-                    this.$emit('canplaythrough');
-                    this.networkState = HTMLMediaElement.NETWORK_IDLE;
-                    console.log('canplaythrough');
-                }
-            }
-            this.player.once('frameReady', () => {
-                if (!this.autoplay) {
-                    this.player.mute = this.defaultMuted;
-                    this.player.pause();
-                    this.player.once('pause', () => this.preventStatusUpdate = false);
-                }
-            });
-            this.player.on('stateChange', onStateChange);
-        });
-
-        this.player.on('stateChange', newState => {
-            console.log('New state: ', newState);
-            if (newState === 'buffering')
-                this.showBuffering();
-        });
+        this.init();
 
         this.interval = setInterval(() => {
             if (this.player.state === 'buffering')
@@ -315,21 +231,112 @@ export default {
             this.hideControls = true;
         }, 1000);
 
-        let canvas = document.querySelector(".canvas");
-        console.log('init vlc player', canvas, chimera, this.player);
-
-        this.player.bindCanvas(canvas);
-
         this.windowResize();
         window.addEventListener('resize', this.windowResize, false);
         document.addEventListener('mousemove', this.controlsMove, false);
         document.addEventListener('mouseup', this.controlsUp, false);
         document.addEventListener('fullscreenchange', this.changeFullscreen, false);
         this.disposeContextMenu = this.createContextMenu();
-
-        this.loadSrc();
     },
     methods: {
+        init() {
+            this.player = chimera.createPlayer();
+            this.player.bindCanvas(this.$refs.canvas);
+            console.log('init vlc player', chimera, this.player);
+
+            this.player.on('play', () => {
+                this.paused = false;
+                this.showStatusText('▶')
+            });
+            this.player.on('pause', () => {
+                this.paused = true;
+                this.showStatusText('⏸')
+            });
+            this.player.on('stop', () => {
+                this.paused = true;
+                this.showStatusText('⏹')
+            });
+            this.player.on('mute', () => {
+                this.muted = true;
+                this.showStatusText('🔇')
+            });
+            this.player.on('unmute', () => {
+                this.muted = false;
+                this.showStatusText(`🔊 ${Math.round(this.player.volume)}%`)
+            });
+            this.player.on('volumeChange', v => {
+                this.volume = v / 100;
+                this.showStatusText(`${this.player.mute ? '🔇' : '🔊'} ${Math.round(v)}%`)
+            });
+            this.player.input.on('rateChange', v => {
+                this.playbackRate = v;
+                this.showStatusText(`🐢 ${v.toFixed(2)}x`)
+            });
+            this.player.on('seek', () => this.showStatusText(`${this.msToTime(this.player.time)} / ${this.msToTime(this.player.duration)}`));
+            this.player.on('load', () => {
+                this.videoResize();
+
+                this.readyState = HTMLMediaElement.HAVE_CURRENT_DATA;
+                this.duration = this.player.duration / 1000;
+
+                this.$emit('loadedmetadata');
+                this.$emit('loadeddata');
+                console.log('loadeddata', this.player.duration);
+            });
+            this.player.on('time', () => {
+                this.dontWatchTime = true;
+                this.currentTime = this.player.time / 1000
+            });
+            this.player.on('ended', () => {
+                if (this.loop) {
+                    this.currentTime = 0;
+                    this.player.once('stop', () => {
+                        this.player.play();
+                        this.player.once('pause', this.player.play);
+                    });
+                } else {
+                    this.$emit('ended');
+                    this.ended = true;
+                }
+            });
+
+            this.player.on('error', err => {
+                this.error = 'VLC error' + err;
+                this.$emit('error', ['VLC error', err]);
+            });
+
+            this.player.on('seekable', (v) => console.log('seekable change', v));
+
+            this.player.on('mediaChange', () => {
+                let onStateChange = newState => {
+                    if (newState === 'play' || newState === 'pause') {
+                        this.player.off('stateChange', onStateChange);
+                        this.readyState = HTMLMediaElement.HAVE_FUTURE_DATA;
+                        this.$emit('canplay');
+                        this.readyState = HTMLMediaElement.HAVE_ENOUGH_DATA;
+                        this.$emit('canplaythrough');
+                        this.networkState = HTMLMediaElement.NETWORK_IDLE;
+                        console.log('canplaythrough');
+                    }
+                }
+                this.player.once('frameReady', () => {
+                    if (!this.autoplay) {
+                        this.player.mute = this.defaultMuted;
+                        this.player.pause();
+                        this.player.once('pause', () => this.preventStatusUpdate = false);
+                    }
+                });
+                this.player.on('stateChange', onStateChange);
+            });
+
+            this.player.on('stateChange', newState => {
+                console.log('New state: ', newState);
+                if (newState === 'buffering')
+                    this.showBuffering();
+            });
+
+            this.loadSrc();
+        },
         showBuffering() {
             clearTimeout(this.showBufferTimeout);
             this.buffering = true;
@@ -663,7 +670,7 @@ export default {
             let {filePath, canceled} = await this.promptSubtitleFile();
             if (!canceled) {
                 console.log("Loading subtitles", filePath);
-                this.player.subtitles.load(filePath)
+                this.player.subtitles.load(filePath);
             }
         },
         async promptSubtitleFile() {
@@ -732,6 +739,27 @@ export default {
                 container.requestFullscreen();
             }
         },
+        iconUrl(icon) {
+            return `https://fonts.gstatic.com/s/i/materialicons/${icon}/v6/24px.svg?download=true`;
+        },
+        // ------------ HTMLVideoElement methods ---------- //
+        addTextTrack(filePath) {
+            this.player.subtitles.load(filePath);
+        },
+        captureStream() {
+            console.warn("Not implemented");
+        },
+        canPlayType(mediaType) {
+            return 'probably';
+        },
+        fastSeek(t) {
+            this.player.time = t * 1000;
+        },
+        load() {
+            // todo this doesnt work well
+            this.player.destroy();
+            this.init();
+        },
         async play() {
             this.player.play();
             if (this.player.state === 'Playing')
@@ -741,8 +769,8 @@ export default {
         pause() {
             this.player.pause();
         },
-        iconUrl(icon) {
-            return `https://fonts.gstatic.com/s/i/materialicons/${icon}/v6/24px.svg?download=true`;
+        seekToNextFrame(n = 1) {
+            this.player.time += (1000 * n) / this.player.input.fps;
         },
     },
     computed: {
@@ -753,11 +781,62 @@ export default {
         audioTracks: {
             cache: false,
             get() {
-                return this.player.audio.tracks.map((track, i) => ({
-                    enabled: this.player.audio.track === i,
+                let audio = this.player.audio;
+                return audio.tracks.slice(1).map((track, i) => ({
+                    get enabled() {
+                        return audio.track === i + 1
+                    },
+                    set enabled(v) {
+                        if (v) audio.track = i + 1
+                        else audio.track = 0
+                    },
                     id: i,
-                    kind: ['disabled', 'main'][i] ?? 'alternative',
+                    kind: i === 0 ? 'main' : 'alternative',
                     label: track,
+                    language: '',
+                    sourceBuffer: null,
+                }))
+            },
+        },
+        textTracks: {
+            cache: false,
+            get() {
+                let subtitles = this.player.subtitles;
+                return subtitles.tracks.slice(1).map((track, i) => ({
+                    get enabled() {
+                        return subtitles.track === i + 1
+                    },
+                    set enabled(v) {
+                        if (v) subtitles.track = i + 1
+                        else subtitles.track = 0
+                    },
+                    id: i,
+                    kind: i === 0 ? 'main' : 'alternative',
+                    label: track,
+                    language: '',
+                    sourceBuffer: null,
+                }))
+            },
+        },
+        videoTracks: {
+            cache: false,
+            get() {
+                let video = this.player.video;
+                return video.tracks.slice(1).map((track, i) => ({
+                    get selected() {
+                        return video.track === i + 1
+                    },
+                    set selected(v) {
+                        if (v) video.track = i + 1
+                        else video.track = 0
+                    },
+                    id: i,
+                    kind: i === 0 ? 'main' : 'alternative',
+                    label: track.name,
+                    size: {
+                        width: track.width,
+                        height: track.height,
+                    },
                     language: '',
                     sourceBuffer: null,
                 }))
@@ -774,6 +853,9 @@ export default {
                     }
                 };
             },
+        },
+        seekable() {
+            return this.readyState > 0;
         },
         // ---------------- Miscellaneous ----------------- //
         position() {
@@ -894,8 +976,13 @@ export default {
 }
 
 .canvas {
+    background-color: #292929;
     width: 100%;
     height: auto;
+}
+
+.hover {
+    position: absolute;
 }
 
 .controls {
@@ -1019,6 +1106,7 @@ export default {
     position: relative;
     background-color: white;
     border-radius: 50%;
+    transition: opacity 0.2s;
 }
 
 .status-text {
