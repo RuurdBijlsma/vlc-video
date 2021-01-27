@@ -1,11 +1,20 @@
 <template>
     <div class="vlc-player"
+         @mousemove="moveOverPlayer"
+         :style="{
+             '--width': `${containerBounds.width}px`,
+             '--height': `${containerBounds.height}px`,
+             cursor: hideControls && !paused ? 'none' : 'auto',
+         }"
          ref="player"
          @click.right="showContext"
          @keydown="handleKey"
          @wheel="handleScroll"
          tabindex="1">
-        <div class="canvas-center">
+        <div class="canvas-center" :style="{
+            width: fullscreen ? '100%' : containerBounds.width + 'px',
+            height: fullscreen ? '100%' : containerBounds.height + 'px',
+        }">
             <canvas
                 :style="{
                     width: canvasBounds.width + 'px',
@@ -14,6 +23,43 @@
                 class="canvas"
                 ref="canvas"
             />
+        </div>
+        <div class="controls" v-if="controls && bounds" :style="{
+            width: containerBounds.width + 'px',
+            height: '85px',
+            top: bounds.top + containerBounds.height - 85 + 'px',
+            left: bounds.left + 'px',
+            opacity: hideControls && !paused ? 0 : 1,
+        }">
+            <div class="controls-top">
+                <div class="controls-left">
+                    <div class="play-button" @click="paused ? play() : pause()" :style="{
+                        backgroundImage: `url(${playIconUrl})`,
+                    }"></div>
+                    <div class="time-info">{{ msToTime(currentTime * 1000) }} / {{ msToTime(duration * 1000) }}</div>
+                </div>
+                <div class="controls-right">
+                    <div class="volume">
+                        <input type="range" step="0.01" min="0" max="2" v-model="volume" value="1"
+                               class="volume-slider">
+                        <div class="volume-icon" @click="player.toggleMute()" :style="{
+                            backgroundImage: `url(${volumeIconUrl})`,
+                        }"></div>
+                    </div>
+                    <div class="fullscreen-button" v-if="!controlsList.includes('nofullscreen')"
+                         @click="toggleFullscreen"></div>
+                </div>
+            </div>
+            <div class="controls-bottom" @mousedown="controlsDown">
+                <div class="seek-background">
+                    <div class="seek-progress" :style="{
+                        width: Math.round(position * 10000) / 100 + '%',
+                    }"></div>
+                    <div class="seek-thumb" :style="{
+                        left: `calc(${Math.round(position * 10000) / 100}% - 6px)`,
+                    }"></div>
+                </div>
+            </div>
         </div>
         <div class="status-text" v-if="bounds" :style="{
             top: (bounds.top + 20) + 'px',
@@ -51,10 +97,15 @@
 // copy entire api from HtmlVideoElement for this
 // https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement
 // https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement
+// Ik ben bij HTMLMediaElement.seekable
 
+// Fix setting src to ''
 // figure out audio device switching
 // Add fullscreen to video submenu? How will we handle this
 // Chromecast support? lmao nee
+
+// on loadeddata (when width and height of frame are known, set element size to proper dimensions,
+// (what happens for size on src change for htmlvideo?))
 
 import {chimera, enums} from 'wrap-chimera'
 import contextMenu from "electron-context-menu";
@@ -63,7 +114,12 @@ import path from 'path'
 export default {
     name: "VlcPlayer",
     props: {
-        dark: {
+        // ------- HTML Video properties -------- //
+        autoplay: {
+            type: Boolean,
+            default: false,
+        },
+        controls: {
             type: Boolean,
             default: false,
         },
@@ -71,7 +127,20 @@ export default {
             type: String,
             default: '',
         },
-        disableStatusText: {
+        width: {
+            type: [Number, String],
+            default: 0,
+        },
+        height: {
+            type: [Number, String],
+            default: 0,
+        },
+        // ---------- Miscellaneous -------- //
+        dark: {
+            type: Boolean,
+            default: false,
+        },
+        enableStatusText: {
             type: Boolean,
             default: false,
         },
@@ -79,66 +148,234 @@ export default {
             type: Boolean,
             default: false,
         },
+        disableScroll: {
+            type: Boolean,
+            default: false,
+        },
+        disableKeys: {
+            type: Boolean,
+            default: false,
+        },
+        loop: {
+            type: Boolean,
+            default: false,
+        },
     },
     data: () => ({
+        bounds: null,
         player: null,
+        interval: null,
         disposeContextMenu: null,
         showContextMenu: false,
         showInformation: false,
+        buffering: false,
+        preventStatusUpdate: false,
         informationContent: '',
-        bounds: null,
         statusText: '',
         statusAnimationDuration: '0s',
-        statusTimeout: -1,
         statusOpacity: 0,
-        buffering: false,
-        interval: null,
+        statusTimeout: -1,
+        volumeInput: 1,
+        dontWatchTime: false,
+        moveTimeout: -1,
+        showBufferTimeout: -1,
+        hideControls: false,
+        fullscreen: false,
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
+        // Video element properties //
+        defaultPlaybackRate: 1,
+        playbackRate: 1,
+        duration: NaN,
+        videoWidth: 0,
+        videoHeight: 0,
+        readyState: HTMLMediaElement.HAVE_NOTHING,
+        volume: 1,
+        muted: false,
+        paused: false,
+        currentTime: 0,
+        controlsList: [],
+        crossOrigin: '',
+        defaultMuted: false,
+        ended: false,
+        error: null,
+        networkState: HTMLMediaElement.NETWORK_EMPTY,
     }),
     beforeDestroy() {
         clearInterval(this.interval);
         clearTimeout(this.statusTimeout);
+        clearTimeout(this.moveTimeout);
+        clearTimeout(this.showBufferTimeout);
         this.player?.destroy?.();
         this.disposeContextMenu?.();
         window.removeEventListener('resize', this.windowResize);
+        document.removeEventListener('mousemove', this.controlsMove);
+        document.removeEventListener('mouseup', this.controlsUp);
+        document.removeEventListener('fullscreenchange', this.changeFullscreen);
     },
     async mounted() {
         this.player = chimera.createPlayer();
-        this.player.on('play', () => this.showStatusText('▶'));
-        this.player.on('pause', () => this.showStatusText('⏸'));
-        this.player.on('stop', () => this.showStatusText('⏹'));
-        this.player.on('mute', () => this.showStatusText('🔇'));
-        this.player.on('unmute', () => this.showStatusText(`🔊 ${Math.round(this.player.volume)}%`));
-        this.player.on('volumeChange', v => this.showStatusText(`${this.player.mute ? '🔇' : '🔊'} ${Math.round(v)}%`));
-        this.player.input.on('rateChange', v => this.showStatusText(`🐢 ${v.toFixed(2)}x`));
-        this.player.on('seek', () => this.showStatusText(`${this.msToTime(this.player.time)} / ${this.msToTime(this.player.duration)}`));
-
-        this.player.on('stateChange', () => {
-            this.buffering = this.state === 'buffering';
+        this.player.on('play', () => {
+            this.paused = false;
+            this.showStatusText('▶')
         });
+        this.player.on('pause', () => {
+            this.paused = true;
+            this.showStatusText('⏸')
+        });
+        this.player.on('stop', () => {
+            this.paused = true;
+            this.showStatusText('⏹')
+        });
+        this.player.on('mute', () => {
+            this.muted = true;
+            this.showStatusText('🔇')
+        });
+        this.player.on('unmute', () => {
+            this.muted = false;
+            this.showStatusText(`🔊 ${Math.round(this.player.volume)}%`)
+        });
+        this.player.on('volumeChange', v => {
+            this.volume = v / 100;
+            this.showStatusText(`${this.player.mute ? '🔇' : '🔊'} ${Math.round(v)}%`)
+        });
+        this.player.input.on('rateChange', v => {
+            this.playbackRate = v;
+            this.showStatusText(`🐢 ${v.toFixed(2)}x`)
+        });
+        this.player.on('seek', () => this.showStatusText(`${this.msToTime(this.player.time)} / ${this.msToTime(this.player.duration)}`));
+        this.player.on('load', () => {
+            this.videoResize();
+
+            this.readyState = HTMLMediaElement.HAVE_CURRENT_DATA;
+            this.duration = this.player.duration / 1000;
+
+            this.$emit('loadedmetadata');
+            this.$emit('loadeddata');
+            console.log('loadeddata', this.player.duration);
+        });
+        this.player.on('time', () => {
+            this.dontWatchTime = true;
+            this.currentTime = this.player.time / 1000
+        });
+        this.player.on('ended', () => {
+            if (this.loop) {
+                this.currentTime = 0;
+                this.player.once('stop', () => {
+                    this.player.play();
+                    this.player.once('pause', this.player.play);
+                });
+            } else {
+                this.$emit('ended');
+                this.ended = true;
+            }
+        });
+
+        this.player.on('error', err => {
+            this.error = 'VLC error' + err;
+            this.$emit('error', ['VLC error', err]);
+        });
+
+        this.player.on('seekable', () => console.log('seekable change'));
+
+        this.player.on('mediaChange', () => {
+            let onStateChange = newState => {
+                if (newState === 'play' || newState === 'pause') {
+                    this.player.off('stateChange', onStateChange);
+                    this.readyState = HTMLMediaElement.HAVE_FUTURE_DATA;
+                    this.$emit('canplay');
+                    this.readyState = HTMLMediaElement.HAVE_ENOUGH_DATA;
+                    this.$emit('canplaythrough');
+                    this.networkState = HTMLMediaElement.NETWORK_IDLE;
+                    console.log('canplaythrough');
+                }
+            }
+            this.player.once('frameReady', () => {
+                if (!this.autoplay) {
+                    this.player.mute = this.defaultMuted;
+                    this.player.pause();
+                    this.player.once('pause', () => this.preventStatusUpdate = false);
+                }
+            });
+            this.player.on('stateChange', onStateChange);
+        });
+
+        this.player.on('stateChange', newState => {
+            console.log('New state: ', newState);
+            if (newState === 'buffering')
+                this.showBuffering();
+        });
+
         this.interval = setInterval(() => {
-            this.buffering = this.state === 'buffering';
-        }, 1000 / 60);
+            if (this.player.state === 'buffering')
+                this.showBuffering();
+        });
+
+        this.moveTimeout = setTimeout(() => {
+            this.hideControls = true;
+        }, 1000);
 
         let canvas = document.querySelector(".canvas");
         console.log('init vlc player', canvas, chimera, this.player);
 
         this.player.bindCanvas(canvas);
-        this.player.on('error', err => console.warn(err));
 
         this.windowResize();
         window.addEventListener('resize', this.windowResize, false);
+        document.addEventListener('mousemove', this.controlsMove, false);
+        document.addEventListener('mouseup', this.controlsUp, false);
+        document.addEventListener('fullscreenchange', this.changeFullscreen, false);
         this.disposeContextMenu = this.createContextMenu();
 
         this.loadSrc();
     },
     methods: {
-        msToTime(ms) {
+        showBuffering() {
+            clearTimeout(this.showBufferTimeout);
+            this.buffering = true;
+            this.showBufferTimeout = setTimeout(() => {
+                this.buffering = false;
+            }, 500);
+        },
+        changeFullscreen() {
+            this.fullscreen = document.fullscreenElement === this.$refs.player;
+            this.windowResize();
+            this.$nextTick(() => this.windowResize());
+        },
+        moveOverPlayer(e) {
+            if (e.movementX > 0 || e.movementY > 0) {
+                this.hideControls = false;
+                clearTimeout(this.moveTimeout);
+                this.moveTimeout = setTimeout(() => {
+                    this.hideControls = true;
+                }, 1000);
+            }
+        },
+        controlsDown(e) {
+            this.mouseDown = true;
+            this.seekByEvent(e);
+        },
+        controlsMove(e) {
+            if (this.mouseDown)
+                this.seekByEvent(e);
+        },
+        controlsUp(e) {
+            if (this.mouseDown)
+                this.seekByEvent(e);
+            this.mouseDown = false;
+        },
+        seekByEvent(e) {
+            // padding 25px
+            let x = (e.pageX - this.bounds.left - 25) / (this.bounds.width - 50);
+            x = Math.max(0, Math.min(1, x));
+            this.player.position = x;
+        },
+        msToTime(ms, keepMs = false) {
             if (isNaN(ms))
-                return `00:00.00`;
-            let hms = new Date(ms).toISOString().substr(11, 11)
-            if (hms.startsWith('00'))
-                return hms.substr(3);
-            return hms;
+                return `00:00` + keepMs ? '.00' : '';
+            let hms = new Date(ms).toISOString().substr(11, keepMs ? 11 : 8).replace(/^0+/, '');
+            hms = hms.startsWith(':') ? hms.substr(1) : hms;
+            return hms.startsWith('00') ? hms.substr(1) : hms;
         },
         showContext() {
             if (this.disableContextMenu)
@@ -252,11 +489,17 @@ export default {
                                 label: 'Video Track',
                                 enabled: this.player.video.tracks.length > 1,
                                 submenu: this.player.video.tracks.map((track, i) => ({
-                                    label: track,
+                                    label: track.name,
                                     type: 'radio',
                                     checked: i === this.player.video.track,
                                     click: () => this.player.video.track = i,
                                 })),
+                            },
+                            {
+                                label: "Fullscreen",
+                                type: 'checkbox',
+                                checked: this.fullscreen,
+                                click: () => this.toggleFullscreen(),
                             },
                             {
                                 label: 'Deinterlace',
@@ -379,9 +622,13 @@ export default {
             });
         },
         handleScroll(e) {
+            if (this.disableScroll)
+                return;
             this.player.volume -= e.deltaY / 20;
         },
         handleKey(e) {
+            if (this.disableKeys)
+                return;
             console.log(e.key);
             switch (true) {
                 case e.key === ' ':
@@ -439,7 +686,7 @@ export default {
             return {canceled, filePath: filePaths[0]};
         },
         showStatusText(text, timeout = 2000) {
-            if (this.disableStatusText)
+            if (!this.enableStatusText || this.preventStatusUpdate)
                 return;
             clearTimeout(this.statusTimeout);
             this.statusAnimationDuration = '0.1s';
@@ -451,64 +698,173 @@ export default {
             }, timeout);
         },
         loadSrc() {
-            this.player.playUrl(this.src);
+            this.preventStatusUpdate = true;
+            this.duration = NaN;
+            this.ended = false;
+            this.readyState = HTMLMediaElement.HAVE_NOTHING;
+            this.networkState = HTMLMediaElement.NETWORK_LOADING;
+            this.videoWidth = 0;
+            this.videoHeight = 0;
+            this.currentTime = 0;
+            this.error = null;
 
-            this.player.once('play', async () => {
-                setTimeout(() => {
-                    this.player.pause();
-                }, 3000);
-            });
+            if (this.src === '') {
+                this.networkState = HTMLMediaElement.NETWORK_NO_SOURCE;
+            }
+
+            this.player.playUrl(this.src);
+        },
+        videoResize() {
+            this.videoWidth = this.player.video.width;
+            this.videoHeight = this.player.video.height;
         },
         windowResize() {
+            this.windowWidth = window.innerWidth;
+            this.windowHeight = window.innerHeight;
             let container = this.$refs.player;
             this.bounds = container.getBoundingClientRect();
-            container.style.setProperty('--width', this.bounds.width + 'px');
-            container.style.setProperty('--height', this.bounds.height + 'px');
+        },
+        toggleFullscreen() {
+            if (this.fullscreen) {
+                document.exitFullscreen();
+            } else {
+                let container = this.$refs.player;
+                container.requestFullscreen();
+            }
+        },
+        async play() {
+            this.player.play();
+            if (this.player.state === 'Playing')
+                return;
+            return new Promise((resolve) => this.player.once('play', resolve));
+        },
+        pause() {
+            this.player.pause();
+        },
+        iconUrl(icon) {
+            return `https://fonts.gstatic.com/s/i/materialicons/${icon}/v6/24px.svg?download=true`;
         },
     },
     computed: {
-        currentTime: {
+        // ------------ HTMLVideoElement getters ---------- //
+        currentSrc() {
+            return this.src;
+        },
+        audioTracks: {
             cache: false,
             get() {
-                return this.player.time / 1000;
+                return this.player.audio.tracks.map((track, i) => ({
+                    enabled: this.player.audio.track === i,
+                    id: i,
+                    kind: ['disabled', 'main'][i] ?? 'alternative',
+                    label: track,
+                    language: '',
+                    sourceBuffer: null,
+                }))
             },
         },
-        videoWidth: {
+        buffered: {
             cache: false,
             get() {
-                return this.player.input.width;
+                return {
+                    length: 1, start: () => {
+                        return 0
+                    }, end: () => {
+                        return this.duration
+                    }
+                };
             },
         },
-        videoHeight: {
-            cache: false,
-            get() {
-                return this.player.input.height;
-            },
-        },
-        canvasBounds() {
-            if (this.bounds === null)
-                return {width: 400, height: 225};
-
-            let width = this.widerThanContainer ? this.bounds.width : Math.round(this.bounds.height * this.aspectRatio)
-            let height = this.widerThanContainer ? Math.round(this.bounds.width / this.aspectRatio) : this.bounds.height
-            return {width, height};
-        },
-        widerThanContainer() {
-            if (this.bounds === null)
-                return false;
-            let containerRatio = this.bounds.width / this.bounds.height;
-            return this.aspectRatio > containerRatio;
+        // ---------------- Miscellaneous ----------------- //
+        position() {
+            if (this.duration && this.duration !== 0)
+                return this.currentTime / this.duration;
+            return 0;
         },
         aspectRatio() {
-            if (this.player === null)
-                return 1;
-            return this.player.input.width / this.player.input.height;
+            return (this.videoWidth !== 0 && this.videoHeight !== 0) ? this.videoWidth / this.videoHeight : 16 / 9;
+        },
+        canvasBounds() {
+            let containerRatio = this.containerBounds.width / this.containerBounds.height;
+            let width, height;
+            if (this.aspectRatio > containerRatio) {
+                width = this.containerBounds.width;
+                height = this.containerBounds.width / this.aspectRatio;
+            } else {
+                width = this.containerBounds.height * this.aspectRatio;
+                height = this.containerBounds.height;
+            }
+            return {
+                width,
+                height,
+            };
+        },
+        containerBounds() {
+            if (this.fullscreen)
+                return {
+                    width: this.windowWidth,
+                    height: this.windowHeight,
+                }
+            let width = this.userWidth;
+            let height = this.userHeight;
+            if (width === undefined && height === undefined) {
+                width = this.videoWidth > 0 ? this.videoWidth : 400;
+                height = this.videoHeight > 0 ? this.videoHeight : 225;
+            } else if (width === undefined) {
+                // Height is user defined
+                width = height * this.aspectRatio;
+            } else if (height === undefined) {
+                // Width is user defined
+                height = width / this.aspectRatio;
+            }
+            return {width, height};
+        },
+        userWidth() {
+            return this.width === 0 ? undefined : +this.width;
+        },
+        userHeight() {
+            return this.height === 0 ? undefined : +this.height;
         },
         menuIconPath() {
             return path.join(__static, `/menu-icons/${this.dark ? 'white' : 'black'}/`);
         },
+        volumeIconUrl() {
+            let icon = this.muted ? 'volume_off' : this.volume < 1 ? 'volume_down' : 'volume_up';
+            return this.iconUrl(icon);
+        },
+        playIconUrl() {
+            let icon = this.paused ? 'play_arrow' : 'pause';
+            return this.iconUrl(icon);
+        },
     },
     watch: {
+        currentTime(newValue, oldValue) {
+            if (newValue !== oldValue && !this.dontWatchTime)
+                this.player.time = this.currentTime * 1000;
+            else if (this.dontWatchTime)
+                this.dontWatchTime = false;
+        },
+        playbackRate(newValue, oldValue) {
+            console.log('playback rate', newValue, oldValue);
+            if (newValue !== oldValue)
+                this.player.input.rate = this.playbackRate;
+        },
+        volume(newValue, oldValue) {
+            if (newValue !== oldValue)
+                this.player.volume = this.volume * 100;
+        },
+        width() {
+            this.$nextTick(() => this.windowResize());
+        },
+        height() {
+            this.$nextTick(() => this.windowResize());
+        },
+        videoWidth() {
+            this.$nextTick(() => this.windowResize());
+        },
+        videoHeight() {
+            this.$nextTick(() => this.windowResize());
+        },
         src() {
             this.loadSrc()
         },
@@ -518,9 +874,9 @@ export default {
 
 <style scoped>
 .vlc-player {
-    background-color: black;
-    --width: 100px;
-    --height: 100px;
+    display: inline-block;
+    --width: 1px;
+    --height: 1px;
 }
 
 .vlc-player:focus {
@@ -534,6 +890,7 @@ export default {
     place-items: center;
     justify-content: center;
     z-index: 1;
+    pointer-events: none;
 }
 
 .canvas {
@@ -541,9 +898,132 @@ export default {
     height: auto;
 }
 
+.controls {
+    transition: opacity 0.3s;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: absolute;
+    background: linear-gradient(0deg, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0) 100%);
+}
+
+.controls-top {
+    width: calc(100% - 20px);
+    padding: 5px 10px 0;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+.controls-top > div {
+    display: flex;
+    align-items: center;
+}
+
+.play-button, .volume-icon, .fullscreen-button {
+    height: 35px;
+    width: 35px;
+    border-radius: 50%;
+    background-size: 60%;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: invert();
+    cursor: pointer;
+    transition: background-color 0.1s;
+}
+
+.play-button:hover, .fullscreen-button:hover {
+    background-color: rgba(222, 222, 222, 0.5);
+}
+
+.play-button {
+    margin-right: 10px;
+    background-image: url('https://fonts.gstatic.com/s/i/materialicons/play_arrow/v6/24px.svg?download=true');
+}
+
+.time-info {
+    text-shadow: 0 0 10px black;
+    color: white;
+    font-size: 14px;
+    vertical-align: bottom;
+    user-select: none;
+    font-family: "Segoe UI", Avenir, Helvetica, Arial, sans-serif;
+}
+
+.volume {
+    cursor: pointer;
+    display: inline-flex;
+    border-radius: 20px;
+    padding: 0 5px 0 15px;
+    transition: background-color 0.2s;
+}
+
+.volume:hover {
+    background-color: rgba(34, 34, 34, 0.5);
+}
+
+.volume-icon {
+    display: inline-flex;
+}
+
+.volume-slider {
+    width: 80px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    filter: grayscale(100%) brightness(150%);
+}
+
+.volume-slider::-webkit-slider-thumb {
+    filter: grayscale(100%) brightness(10000%);
+}
+
+.volume:hover .volume-slider {
+    opacity: 1;
+}
+
+.fullscreen-button {
+    margin-left: 5px;
+    background-image: url('https://fonts.gstatic.com/s/i/materialicons/fullscreen/v6/24px.svg?download=true');
+}
+
+.controls-bottom {
+    cursor: pointer;
+    padding: 5px 25px;
+    width: calc(100% - 50px);
+}
+
+.controls-bottom > * {
+    pointer-events: none;
+}
+
+.seek-background {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    height: 4px;
+    width: 100%;
+}
+
+.seek-progress {
+    background-color: white;
+    width: 50%;
+    height: 4px;
+    border-top-left-radius: 2px;
+    border-bottom-left-radius: 2px;
+}
+
+.seek-thumb {
+    width: 12px;
+    height: 12px;
+    left: calc(50% - 6px);
+    top: -8px;
+    position: relative;
+    background-color: white;
+    border-radius: 50%;
+}
+
 .status-text {
     font-family: "Segoe UI Symbol", Symbol, sans-serif;
-    position: fixed;
+    position: absolute;
     font-size: calc(var(--width) / 18);
     width: calc(var(--width) * 0.95);
     text-align: right;
@@ -552,7 +1032,7 @@ export default {
 }
 
 .lds-ring {
-    position: fixed;
+    position: absolute;
     z-index: 3;
     display: inline-block;
     width: calc(var(--width) / 19);
@@ -599,7 +1079,7 @@ export default {
     width: calc(var(--width) - 40px);
     max-height: calc(var(--height) - 40px);
 
-    position: fixed;
+    position: absolute;
     z-index: 3;
 }
 
