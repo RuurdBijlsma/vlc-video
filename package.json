@@ -1,6 +1,6 @@
 {
   "name": "vue-vlc-player",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "author": "Ruurd Bijlsma <ruurd@bijlsma.dev>",
   "description": "VLC Player component for Vue/Electron",
