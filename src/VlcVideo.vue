@@ -98,6 +98,8 @@
 
 <script>
 // TODO
+// Add more os and electron support to wcjs-prebuilt
+// Make wcjs-prebuilt an NPM package
 // dont fire scroll event on media information
 // figure out audio device switching
 // Chromecast support? lmao nee
