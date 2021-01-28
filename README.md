@@ -2,7 +2,9 @@
 
 VLC player component for [vue-electron-builder](https://github.com/nklayman/vue-cli-plugin-electron-builder) projects (
 might also work in other Vue/Electron projects). This component was made to work as similarly to `<video>` as possible,
-when `controls` are enabled they will look similar to Chrome's `<video controls>`
+when `controls` are enabled they will look similar to Chrome's `<video controls>`. 
+
+Demo Electron app can be found here: https://github.com/RuurdBijlsma/vlc-video-demo
 
 ### Example usage in a Vue single file component:
 
