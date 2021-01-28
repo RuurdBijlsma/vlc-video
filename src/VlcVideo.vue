@@ -240,7 +240,6 @@ export default {
         Promise.all(icons.map(this.nativeIcon))
             .then(result => {
                 result.forEach((icon, i) => this.icons[icons[i]] = icon);
-                console.log(this.icons);
             });
 
         this.init();
@@ -266,11 +265,9 @@ export default {
             let firstPlay = true, firstPause = true;
             this.player = chimera.createPlayer();
             this.player.bindCanvas(this.$refs.canvas);
-            console.log('init vlc player', chimera, this.player);
 
             this.player.on('play', () => {
                 this.paused = false;
-                console.log("on play fired", firstPlay);
                 if (firstPlay) {
                     firstPlay = false;
                 } else {
@@ -322,7 +319,6 @@ export default {
 
                 this.$emit('loadedmetadata');
                 this.$emit('loadeddata');
-                console.log('loadeddata', this.player.duration);
             });
             this.player.on('time', () => {
                 this.dontWatchTime = true;
@@ -343,7 +339,6 @@ export default {
             });
 
             this.player.on('durationChange', duration => {
-                console.log('durationchange', duration);
                 this.$emit('durationchange', duration / 1000);
                 this.duration = duration / 1000;
             });
@@ -353,8 +348,6 @@ export default {
                 this.$emit('stalled');
                 this.$emit('error', ['VLC error', err]);
             });
-
-            this.player.on('seekable', (v) => console.log('seekable change', v));
 
             this.player.on('mediaChange', () => {
                 firstPlay = true;
@@ -367,7 +360,6 @@ export default {
                         this.readyState = HTMLMediaElement.HAVE_ENOUGH_DATA;
                         this.$emit('canplaythrough');
                         this.networkState = HTMLMediaElement.NETWORK_IDLE;
-                        console.log('canplaythrough');
                     }
                 }
                 this.player.once('frameReady', () => {
@@ -386,7 +378,6 @@ export default {
                     this.$emit('playing');
                 }
                 prevState = newState;
-                console.log('New state: ', newState);
                 if (newState === 'buffering')
                     this.showBuffering();
             });
@@ -697,7 +688,6 @@ export default {
         handleKey(e) {
             if (this.disableKeys)
                 return;
-            console.log(e.key);
             switch (true) {
                 case e.key === ' ':
                     this.player.togglePause();
@@ -730,7 +720,6 @@ export default {
         async addSubtitles() {
             let {filePath, canceled} = await this.promptSubtitleFile();
             if (!canceled) {
-                console.log("Loading subtitles", filePath);
                 this.player.subtitles.load(filePath);
             }
         },
@@ -786,7 +775,6 @@ export default {
             this.player.playUrl(this.src);
             this.$on('play', () => {
                 this.firstPlayLoaded = true
-                console.log('firstplay loaded');
             });
             this.$emit('loadstart');
         },
@@ -1049,7 +1037,6 @@ export default {
                 this.dontWatchTime = false;
         },
         playbackRate(newValue, oldValue) {
-            console.log('playback rate', newValue, oldValue);
             if (newValue !== oldValue)
                 this.player.input.rate = this.playbackRate;
         },
