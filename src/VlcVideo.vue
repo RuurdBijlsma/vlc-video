@@ -1,92 +1,46 @@
 <template>
     <div class="vlc-video"
-         :style="{
-             '--width': `${containerBounds.width}px`,
-             '--height': `${containerBounds.height}px`,
-             cursor: hideControls && !mouseOverControls && !paused ? 'none' : 'auto',
-         }"
+         :style="mainStyle"
          @mousemove="moveOverPlayer"
          ref="player"
          @click.right="showContext"
          @keydown="handleKey"
          @wheel="handleScroll"
          tabindex="1">
+        <div class="status-text" :style="{
+            opacity: statusOpacity,
+            transitionDuration: statusAnimationDuration,
+        }" v-html="statusText"/>
+        <loading-ring class="loading-ring" :style="{opacity: buffering ? 1 : 0}"/>
         <div class="canvas-center" :style="{
-            width: fullscreen ? '100%' : containerBounds.width + 'px',
-            height: fullscreen ? '100%' : containerBounds.height + 'px',
             backgroundImage: poster === '' ? 'none' : `url(${poster})`,
             backgroundSize: coverPoster ? 'cover' : 'contain',
         }">
             <canvas
                 :style="{
-                    opacity: poster === '' || firstPlayLoaded ? 1 : 0,
                     width: canvasBounds.width + 'px',
                     height: canvasBounds.height + 'px',
+                    opacity: poster === '' || firstPlayLoaded ? 1 : 0,
                 }"
                 class="canvas"
                 ref="canvas"
             />
         </div>
-        <div class="controls" @mouseenter="mouseOverControls=true" @mouseleave="mouseOverControls=false"
-             v-if="controls && bounds" :style="{
-            width: containerBounds.width + 'px',
-            height: '85px',
-            top: bounds.top + containerBounds.height - 85 + 'px',
-            left: bounds.left + 'px',
-            opacity: hideControls && !mouseOverControls && !paused ? 0 : readyState < 2 ? 0.5 : 1,
-            pointerEvents: readyState < 2 ? 'none' : 'all',
-        }">
-            <div class="controls-top">
-                <div class="controls-left">
-                    <div class="play-button" @click="paused ? play() : pause()" :style="{
-                        backgroundImage: `url(${playIconUrl})`,
-                    }"></div>
-                    <div class="time-info">{{ msToTime(currentTime * 1000) }} / {{ msToTime(duration * 1000) }}</div>
-                </div>
-                <div class="controls-right">
-                    <div class="volume">
-                        <input type="range" step="0.01" min="0" max="2" v-model="volume" value="1"
-                               class="volume-slider">
-                        <div class="volume-icon" @click="player.toggleMute()" :style="{
-                            backgroundImage: `url(${volumeIconUrl})`,
-                        }"></div>
-                    </div>
-                    <div class="fullscreen-button" v-if="!controlsList.includes('nofullscreen')"
-                         @click="toggleFullscreen"></div>
-                </div>
-            </div>
-            <div class="controls-bottom" @mousedown="controlsDown">
-                <div class="seek-background">
-                    <div class="seek-progress" :style="{
-                        width: Math.round(position * 10000) / 100 + '%',
-                    }"></div>
-                    <div class="seek-thumb" :style="{
-                        opacity: mouseOverControls ? 1 : 0,
-                        left: `calc(${Math.round(position * 10000) / 100}% - 6px)`,
-                    }"></div>
-                </div>
-            </div>
-        </div>
-        <div class="status-text" v-if="bounds" :style="{
-            top: (bounds.top + 20) + 'px',
-            left: bounds.left + 'px',
-            opacity: statusOpacity,
-            transitionDuration: statusAnimationDuration,
-        }" v-html="statusText"/>
-        <div class="lds-ring" v-if="bounds && buffering" :style="{
-            top: (bounds.top + 20) + 'px',
-            left: (bounds.left + 20) + 'px',
-        }">
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-        </div>
-        <div class="media-information" v-if="bounds && showInformation" :style="{
+        <controls v-if="controls"
+                  @mouseenter.native="mouseOverControls=true" @mouseleave.native="mouseOverControls=false" @play="play"
+                  @pause="pause" @seek="player.position = $event" @toggleFullscreen="toggleFullscreen"
+                  @toggleMute="player.toggleMute()"
+                  :mouse-over-controls="mouseOverControls" :current-time="currentTime" :duration="duration"
+                  :muted="muted" :paused="paused" :bounds="bounds" :position="position"
+                  :disable-fullscreen="controlsList.includes('nofullscreen')"
+                  v-model="volume"
+                  :style="{
+                      opacity: hideControls && !mouseOverControls && !paused ? 0 : readyState < 2 ? 0.5 : 1,
+                      pointerEvents: readyState < 2 ? 'none' : 'all',
+                  }"/>
+        <div class="media-information" v-if="showInformation" :style="{
             backgroundColor: dark ? '#333333ee' : '#aaaaaaee',
             color: dark ? '#aaaaaaee': '#333333ee',
-            top: (bounds.top + 20) + 'px',
-            left: (bounds.left + 20) + 'px',
         }">
             <div class="toolbar">
                 <div class="close" @click="showInformation=false">x</div>
@@ -106,14 +60,18 @@
 // try to get css height and width working
 // node-pre-gyp for WebChimera
 // Chromecast support? lmao nee
+// make into non-vue component
 
 import {chimera, enums} from 'wrap-chimera'
 import contextMenu from "electron-context-menu";
-import {nativeImage} from "electron";
+import LoadingRing from "./LoadingRing";
+import Controls from "./Controls";
+import Utils from "./utils";
 
 
 export default {
     name: "VlcVideo",
+    components: {Controls, LoadingRing},
     props: {
         // ------- HTML Video properties -------- //
         autoplay: {
@@ -145,6 +103,10 @@ export default {
             default: false,
         },
         // ---------- Miscellaneous -------- //
+        hideBuffering: {
+            type: Boolean,
+            default: false,
+        },
         coverPoster: {
             type: Boolean,
             default: false,
@@ -171,7 +133,7 @@ export default {
         },
     },
     data: () => ({
-        bounds: null,
+        computedBounds: {width: 0, height: 0},
         player: null,
         interval: null,
         disposeContextMenu: null,
@@ -189,12 +151,12 @@ export default {
         moveTimeout: -1,
         showBufferTimeout: -1,
         hideControls: false,
-        fullscreen: false,
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
         mouseOverControls: false,
         icons: {},
         firstPlayLoaded: false,
+        resizeInterval: -1,
         // Video element properties //
         defaultPlaybackRate: 1,
         playbackRate: 1,
@@ -217,19 +179,18 @@ export default {
     }),
     beforeDestroy() {
         clearInterval(this.interval);
+        clearInterval(this.resizeInterval);
         clearTimeout(this.statusTimeout);
         clearTimeout(this.moveTimeout);
         clearTimeout(this.showBufferTimeout);
         this.player?.destroy?.();
         this.disposeContextMenu?.();
         window.removeEventListener('resize', this.windowResize);
-        document.removeEventListener('mousemove', this.controlsMove);
-        document.removeEventListener('mouseup', this.controlsUp);
         document.removeEventListener('fullscreenchange', this.changeFullscreen);
     },
     async mounted() {
         let icons = ['pause', 'play_arrow', 'stop', 'volume_up', 'volume_down', 'volume_off', 'volume_off', 'info', 'info'];
-        Promise.all(icons.map(this.nativeIcon))
+        Promise.all(icons.map(Utils.nativeIcon))
             .then(result => {
                 result.forEach((icon, i) => this.icons[icons[i]] = icon);
             });
@@ -239,7 +200,10 @@ export default {
         this.interval = setInterval(() => {
             if (this.player.state === 'buffering')
                 this.showBuffering();
-        });
+        }, 1000 / 50);
+        this.resizeInterval = setInterval(() => {
+            this.windowResize();
+        }, 1000 / 20);
 
         this.moveTimeout = setTimeout(() => {
             this.hideControls = true;
@@ -247,8 +211,6 @@ export default {
 
         this.windowResize();
         window.addEventListener('resize', this.windowResize, false);
-        document.addEventListener('mousemove', this.controlsMove, false);
-        document.addEventListener('mouseup', this.controlsUp, false);
         document.addEventListener('fullscreenchange', this.changeFullscreen, false);
         this.disposeContextMenu = this.createContextMenu();
     },
@@ -378,11 +340,13 @@ export default {
         },
         showBuffering() {
             this.$emit('waiting');
+            if (this.hideBuffering) return;
             clearTimeout(this.showBufferTimeout);
+
             this.buffering = true;
             this.showBufferTimeout = setTimeout(() => {
                 this.buffering = false;
-            }, 500);
+            }, 300);
         },
         changeFullscreen() {
             this.fullscreen = document.fullscreenElement === this.$refs.player;
@@ -398,31 +362,8 @@ export default {
                 }, 1000);
             }
         },
-        controlsDown(e) {
-            this.mouseDown = true;
-            this.seekByEvent(e);
-        },
-        controlsMove(e) {
-            if (this.mouseDown)
-                this.seekByEvent(e);
-        },
-        controlsUp(e) {
-            if (this.mouseDown)
-                this.seekByEvent(e);
-            this.mouseDown = false;
-        },
-        seekByEvent(e) {
-            // padding 25px
-            let x = (e.pageX - this.bounds.left - 25) / (this.bounds.width - 50);
-            x = Math.max(0, Math.min(1, x));
-            this.player.position = x;
-        },
         msToTime(ms, keepMs = false) {
-            if (isNaN(ms))
-                return `00:00` + keepMs ? '.00' : '';
-            let hms = new Date(ms).toISOString().substr(11, keepMs ? 11 : 8).replace(/^0+/, '');
-            hms = hms.startsWith(':') ? hms.substr(1) : hms;
-            return hms.startsWith('00') ? hms.substr(1) : hms;
+            return Utils.msToTime(ms, keepMs);
         },
         showContext() {
             if (!this.enableContextMenu)
@@ -778,7 +719,12 @@ export default {
             this.windowWidth = window.innerWidth;
             this.windowHeight = window.innerHeight;
             let container = this.$refs.player;
-            this.bounds = container.getBoundingClientRect();
+            this.computedBounds = {
+                width: container.offsetWidth,
+                height: container.offsetHeight,
+                left: container.offsetLeft,
+                top: container.offsetTop,
+            };
         },
         toggleFullscreen() {
             if (this.fullscreen) {
@@ -787,55 +733,6 @@ export default {
                 let container = this.$refs.player;
                 container.requestFullscreen();
             }
-        },
-        iconUrl(icon) {
-            return `https://fonts.gstatic.com/s/i/materialicons/${icon}/v6/24px.svg?download=true`;
-        },
-        async nativeIcon(icon) {
-            return await this.nativeImage(this.iconUrl(icon));
-        },
-        async nativeImage(url, dark = this.dark) {
-            if (!nativeImage.cache)
-                nativeImage.cache = {};
-            if (!nativeImage.cache[url]) {
-                let {black, white} = await this.getSvgIcon(url);
-                nativeImage.cache[url] = {
-                    black: nativeImage.createFromDataURL(black),
-                    white: nativeImage.createFromDataURL(white)
-                };
-            }
-            return nativeImage.cache[url][dark ? 'white' : 'black'];
-        },
-        /**
-         * @param url
-         * @param {int} width
-         * @param {int} height
-         * @returns {Promise<string>}
-         */
-        async getSvgIcon(url, width = 18, height = 18) {
-            return new Promise((resolve, reject) => {
-                let img = new Image();
-                img.src = url;
-                img.crossOrigin = "anonymous";
-                img.onload = () => {
-                    let canvas = document.createElement('canvas');
-                    let context = canvas.getContext('2d');
-                    canvas.width = width;
-                    canvas.height = height;
-                    context.drawImage(img, 0, 0, width, height);
-                    let black = canvas.toDataURL();
-                    let imgData = context.getImageData(0, 0, img.width, img.height);
-                    for (let i = 0; i < imgData.data.length; i += 4) {
-                        imgData.data[i] = 255 - imgData.data[i];
-                        imgData.data[i + 1] = 255 - imgData.data[i + 1];
-                        imgData.data[i + 2] = 255 - imgData.data[i + 2];
-                    }
-                    context.putImageData(imgData, 0, 0);
-                    let white = canvas.toDataURL();
-                    resolve({black, white});
-                }
-                img.onerror = reject;
-            })
         },
         // ------------ HTMLVideoElement methods ---------- //
         addTextTrack(filePath) {
@@ -876,6 +773,55 @@ export default {
         },
     },
     computed: {
+        mainStyle() {
+            let style = {
+                '--width': `${this.bounds.width}px`,
+                '--height': `${this.bounds.height}px`,
+                cursor: this.hideControls && !this.mouseOverControls && !this.paused ? 'none' : 'auto',
+            }
+            if (this.height === 'auto')
+                style.height = this.bounds.height + 'px';
+            if (this.height !== 0)
+                style.height = this.bounds.height + 'px';
+            if (this.width === 'auto')
+                style.width = this.bounds.width + 'px';
+            if (this.width !== 0)
+                style.width = this.bounds.width + 'px';
+            return style;
+        },
+        bounds() {
+            return {
+                ...this.computedBounds,
+                width: this.width === 'auto' ? this.canvasBounds.width :
+                    this.width !== 0 ? +this.width :
+                        Math.max(this.computedBounds.width, this.canvasBounds.width),
+                height: this.height === 'auto' ? this.canvasBounds.height :
+                    this.height !== 0 ? +this.height :
+                        Math.max(this.computedBounds.height, this.canvasBounds.height),
+            };
+        },
+        canvasBounds() {
+            let width, height;
+            if (this.height === 'auto' && this.width === 'auto') {
+                return {width: this.videoWidth, height: this.videoHeight};
+            } else if (this.height === 'auto') {
+                width = this.computedBounds.width;
+                height = width / this.aspectRatio;
+            } else if (this.width === 'auto') {
+                height = this.computedBounds.height;
+                width = height * this.aspectRatio;
+            } else {
+                let containerRatio = this.computedBounds.width / this.computedBounds.height;
+                if (this.aspectRatio > containerRatio) {
+                    width = this.computedBounds.width;
+                    height = width / this.aspectRatio;
+                } else {
+                    height = this.computedBounds.height;
+                    width = height * this.aspectRatio;
+                }
+            }
+            return {width, height};
+        },
         // ------------ HTMLVideoElement getters ---------- //
         currentSrc() {
             return this.src;
@@ -968,54 +914,11 @@ export default {
         aspectRatio() {
             return (this.videoWidth !== 0 && this.videoHeight !== 0) ? this.videoWidth / this.videoHeight : 16 / 9;
         },
-        canvasBounds() {
-            let containerRatio = this.containerBounds.width / this.containerBounds.height;
-            let width, height;
-            if (this.aspectRatio > containerRatio) {
-                width = this.containerBounds.width;
-                height = this.containerBounds.width / this.aspectRatio;
-            } else {
-                width = this.containerBounds.height * this.aspectRatio;
-                height = this.containerBounds.height;
-            }
-            return {
-                width,
-                height,
-            };
-        },
-        containerBounds() {
-            if (this.fullscreen)
-                return {
-                    width: this.windowWidth,
-                    height: this.windowHeight,
-                }
-            let width = this.userWidth;
-            let height = this.userHeight;
-            if (width === undefined && height === undefined) {
-                width = this.videoWidth > 0 ? this.videoWidth : 400;
-                height = this.videoHeight > 0 ? this.videoHeight : 225;
-            } else if (width === undefined) {
-                // Height is user defined
-                width = height * this.aspectRatio;
-            } else if (height === undefined) {
-                // Width is user defined
-                height = width / this.aspectRatio;
-            }
-            return {width, height};
-        },
         userWidth() {
             return this.width === 0 ? undefined : +this.width;
         },
         userHeight() {
             return this.height === 0 ? undefined : +this.height;
-        },
-        volumeIconUrl() {
-            let icon = this.muted ? 'volume_off' : this.volume < 1 ? 'volume_down' : 'volume_up';
-            return this.iconUrl(icon);
-        },
-        playIconUrl() {
-            let icon = this.paused ? 'play_arrow' : 'pause';
-            return this.iconUrl(icon);
         },
     },
     watch: {
@@ -1055,8 +958,9 @@ export default {
 <style scoped>
 .vlc-video {
     display: inline-block;
-    --width: 1px;
-    --height: 1px;
+    --width: 100px;
+    --height: 50px;
+    position: relative;
 }
 
 .vlc-video:focus {
@@ -1074,197 +978,43 @@ export default {
     justify-content: center;
     z-index: 1;
     pointer-events: none;
+    position: absolute;
+    top: 0;
+    left: 0;
 }
 
 .canvas {
+    float: left;
+    max-width: var(--width);
+    max-height: var(--height);
     background-color: #292929;
-    width: 100%;
-    height: auto;
-}
-
-.controls {
-    transition: opacity 0.3s;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    position: absolute;
-    background: linear-gradient(0deg, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0) 100%);
-}
-
-.controls-top {
-    width: calc(100% - 20px);
-    padding: 5px 10px 0;
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
-}
-
-.controls-top > div {
-    display: flex;
-    align-items: center;
-}
-
-.play-button, .volume-icon, .fullscreen-button {
-    height: 35px;
-    width: 35px;
-    border-radius: 50%;
-    background-size: 60%;
-    background-position: center;
-    background-repeat: no-repeat;
-    filter: invert();
-    cursor: pointer;
-    transition: background-color 0.1s;
-}
-
-.play-button:hover, .fullscreen-button:hover {
-    background-color: rgba(222, 222, 222, 0.5);
-}
-
-.play-button {
-    margin-right: 10px;
-    background-image: url('https://fonts.gstatic.com/s/i/materialicons/play_arrow/v6/24px.svg?download=true');
-}
-
-.time-info {
-    text-shadow: 0 0 10px black;
-    color: white;
-    font-size: 14px;
-    vertical-align: bottom;
-    user-select: none;
-    font-family: "Segoe UI", Avenir, Helvetica, Arial, sans-serif;
-}
-
-.volume {
-    cursor: pointer;
-    display: inline-flex;
-    border-radius: 20px;
-    padding: 0 5px 0 15px;
-    transition: background-color 0.2s;
-}
-
-.volume:hover {
-    background-color: rgba(34, 34, 34, 0.5);
-}
-
-.volume-icon {
-    display: inline-flex;
-}
-
-.volume-slider {
-    width: 80px;
-    opacity: 0;
-    transition: opacity 0.2s;
-    filter: grayscale(100%) brightness(150%);
-}
-
-.volume-slider::-webkit-slider-thumb {
-    filter: grayscale(100%) brightness(10000%);
-}
-
-.volume:hover .volume-slider {
-    opacity: 1;
-}
-
-.fullscreen-button {
-    margin-left: 5px;
-    background-image: url('https://fonts.gstatic.com/s/i/materialicons/fullscreen/v6/24px.svg?download=true');
-}
-
-.controls-bottom {
-    cursor: pointer;
-    padding: 5px 25px;
-    width: calc(100% - 50px);
-}
-
-.controls-bottom > * {
-    pointer-events: none;
-}
-
-.seek-background {
-    background-color: rgba(255, 255, 255, 0.3);
-    border-radius: 2px;
-    height: 4px;
-    width: 100%;
-}
-
-.seek-progress {
-    background-color: white;
-    width: 50%;
-    height: 4px;
-    border-top-left-radius: 2px;
-    border-bottom-left-radius: 2px;
-}
-
-.seek-thumb {
-    width: 12px;
-    height: 12px;
-    left: calc(50% - 6px);
-    top: -8px;
-    position: relative;
-    background-color: white;
-    border-radius: 50%;
-    transition: opacity 0.2s;
 }
 
 .status-text {
     font-family: "Segoe UI Symbol", Symbol, sans-serif;
-    position: absolute;
     font-size: calc(var(--width) / 18);
-    width: calc(var(--width) * 0.95);
     text-align: right;
     color: white;
     text-shadow: 0 0 calc(var(--width) / 100) black;
-}
-
-.lds-ring {
     position: absolute;
+    top: 10%;
+    right: 10%;
     z-index: 3;
-    display: inline-block;
-    width: calc(var(--width) / 19);
-    height: calc(var(--width) / 19);
 }
 
-.lds-ring div {
-    /*box-shadow: inset 0 0 calc(var(--width) / 20) 0 rgba(0, 0, 0, 0.1), 0 0 calc(var(--width) / 20) rgba(0, 0, 0, 0.4);*/
-    box-sizing: border-box;
-    display: block;
+.loading-ring {
     position: absolute;
-    width: calc(var(--width) / 20);
-    height: calc(var(--width) / 20);
-    margin: calc(var(--width) / 100);
-    border: calc(var(--width) / 100) solid #fff;
-    border-radius: 50%;
-    animation: lds-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
-    border-color: #fff transparent transparent transparent;
+    top: 10%;
+    left: 10%;
+    z-index: 3;
 }
-
-.lds-ring div:nth-child(1) {
-    animation-delay: -0.45s;
-}
-
-.lds-ring div:nth-child(2) {
-    animation-delay: -0.3s;
-}
-
-.lds-ring div:nth-child(3) {
-    animation-delay: -0.15s;
-}
-
-@keyframes lds-ring {
-    0% {
-        transform: rotate(0deg);
-    }
-    100% {
-        transform: rotate(360deg);
-    }
-}
-
 
 .media-information {
-    width: calc(var(--width) - 40px);
-    max-height: calc(var(--height) - 40px);
-
+    width: calc(var(--width) - 10%);
+    max-height: calc(var(--height) - 10%);
     position: absolute;
+    top: 5%;
+    left: 5%;
     z-index: 3;
 }
 
