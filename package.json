@@ -1,32 +1,25 @@
 {
-  "name": "vue-vlc-player",
-  "version": "0.1.4",
-  "private": true,
+  "name": "vlc-video",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/VlcVideo.vue",
+  "scripts": {},
+  "keywords": [
+    "vlc",
+    "video",
+    "player",
+    "electron",
+    "vue"
+  ],
   "author": "Ruurd Bijlsma <ruurd@bijlsma.dev>",
-  "description": "VLC Player component for Vue/Electron",
-  "scripts": {
-    "serve": "vue-cli-service serve",
-    "build": "vue-cli-service build",
-    "electron:build": "vue-cli-service electron:build",
-    "electron:serve": "vue-cli-service electron:serve",
-    "postinstall": "electron-builder install-app-deps",
-    "postuninstall": "electron-builder install-app-deps"
-  },
-  "main": "background.js",
+  "license": "MIT",
   "dependencies": {
-    "core-js": "^3.6.5",
     "electron-context-menu": "^2.4.0",
-    "vue": "^2.6.11",
-    "wcjs-prebuilt": "github:RuurdBijlsma/wcjs-prebuilt",
     "wrap-chimera": "github:RuurdBijlsma/wrap-chimera"
   },
-  "devDependencies": {
-    "@vue/cli-plugin-babel": "~4.5.0",
-    "@vue/cli-service": "~4.5.0",
+  "peerDependencies": {
+    "wcjs-prebuilt": "github:RuurdBijlsma/wcjs-prebuilt",
     "electron": "11.1.0",
-    "electron-devtools-installer": "^3.1.0",
-    "node-loader": "^1.0.2",
-    "vue-cli-plugin-electron-builder": "~2.0.0-rc.5",
-    "vue-template-compiler": "^2.6.11"
+    "vue": "^2.6.11"
   }
 }
