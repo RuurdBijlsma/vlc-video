@@ -57,7 +57,6 @@
 // Maybe refactor code, make this less of a huge file
 // dont fire scroll event on media information
 // figure out audio device switching
-// try to get css height and width working
 // node-pre-gyp for WebChimera
 // Chromecast support? lmao nee
 // make into non-vue component
