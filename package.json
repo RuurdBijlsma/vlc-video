@@ -1,6 +1,6 @@
 {
   "name": "vlc-video",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Vue component containing embedded VLC player, can be used in Electron.",
   "main": "src/VlcVideo.vue",
   "scripts": {},
@@ -12,6 +12,9 @@
     "vue"
   ],
   "author": "Ruurd Bijlsma <ruurd@bijlsma.dev>",
+  "homepage": "https://github.com/RuurdBijlsma/vlc-video#readme",
+  "repository": "https://github.com/RuurdBijlsma/vlc-video",
+  "bugs": "https://github.com/RuurdBijlsma/vlc-video/issues",
   "license": "MIT",
   "dependencies": {
     "electron-context-menu": "^2.4.0",
