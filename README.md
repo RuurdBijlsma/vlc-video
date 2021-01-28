@@ -1,12 +1,13 @@
 # `<vlc-video>`
 
-VLC player component for [vue-electron-builder](https://github.com/nklayman/vue-cli-plugin-electron-builder) projects (might also work in other Vue/Electron projects). This
-component was made to work as similarly to `<video>` as possible, when `controls` are enabled they will look similar to
-Chrome's `<video controls>`
+VLC player component for [vue-electron-builder](https://github.com/nklayman/vue-cli-plugin-electron-builder) projects (
+might also work in other Vue/Electron projects). This component was made to work as similarly to `<video>` as possible,
+when `controls` are enabled they will look similar to Chrome's `<video controls>`
 
 ### Example usage in a Vue single file component:
 
 ```html
+
 <template>
     <vlc-video height="300" controls dark src="http://localhost:3000/file.mkv"/>
 </template>
@@ -32,7 +33,7 @@ Chrome's `<video controls>`
     * `cover-poster` determines if the poster should cover the player or be contained within the player
     * `enable-keys` Enables key binds
     * `enable-scroll` Enables scroll to change volume
-    * `enable-status-text` Enables status icons top right like VLC has (showing when volume changed, seek time,
+    * `enable-status` Enables status icons top right like VLC has (showing when volume changed, seek time,
       play/pause, etc.)
     * `enable-context-menu` Enables context menu allowing user control over video/audio/subtitle track, and some other
       VLC features
@@ -41,12 +42,14 @@ Chrome's `<video controls>`
 ## Biggest differences with `<video>`
 
 * For now only works on Windows x64 and Electron 11 as far as I know, this will probably be fixed in the future
-* This is a Vue component, so some things will work differently, such as events, and programmatically setting certain props
-* libvlc doesn't expose what sections of the video are buffered as far as I know, so the `.buffered` member returns that everything
-  is buffered.
+* This is a Vue component, so some things will work differently, such as events, and programmatically setting certain
+  props
+* libvlc doesn't expose what sections of the video are buffered as far as I know, so the `.buffered` member returns that
+  everything is buffered.
 * `.canPlayType(mediaType)` always returns `'probably'`
 * `srcObject` and `captureStream` are not supported
-* Subtitles are handled by VLC, add a subtitles track by calling `.addTextTrack(filepath)` on the VlcVideo VueComponent. This file can be of any subtitles filetype that VLC supports.
+* Subtitles are handled by VLC, add a subtitles track by calling `.addTextTrack(filepath)` on the VlcVideo VueComponent.
+  This file can be of any subtitles filetype that VLC supports.
 * The CSS properties `height` and `width` don't affect this player like they do a HTMLVideoElement. `width` and `height`
   on the element itself do work, for example: `<vlc-video width="500" src="http://example.com/file.mkv">`
 * `picture-in-picture` is not supported
@@ -56,7 +59,8 @@ Chrome's `<video controls>`
 ## Installation
 
 1. `npm install vlc-video`
-2. Make sure `electron`, `vue`, and `RuurdBijlsma/wcjs-prebuilt` are installed alongside this (they are peer dependencies)
+2. Make sure `electron`, `vue`, and `RuurdBijlsma/wcjs-prebuilt` are installed alongside this (they are peer
+   dependencies)
 3. Make sure `nodeIntegration: true` and `externals: ['wcjs-prebuilt']` are specified in `vue.config.js` as shown below.
 
 ```js
@@ -68,4 +72,15 @@ module.exports = {
         }
     },
 }
+```
+
+4. When creating your browserWindow in Electron, in `webPreferences` enable remote modules:
+
+```js
+const win = new BrowserWindow({
+    webPreferences: {
+        enableRemoteModule: true,
+        nodeIntegration: process.env.ELECTRON_NODE_INTEGRATION,
+    }
+})
 ```

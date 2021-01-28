@@ -99,24 +99,11 @@
 <script>
 // TODO
 // dont fire scroll event on media information
-
-// copy entire api from HtmlVideoElement for this
-// https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement
-// https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement
-// Inherited members are still required
-
-// Fix setting src to ''
 // figure out audio device switching
-// Add fullscreen to video submenu? How will we handle this
 // Chromecast support? lmao nee
-
-// on loadeddata (when width and height of frame are known, set element size to proper dimensions,
-// (what happens for size on src change for htmlvideo?))
 
 import {chimera, enums} from 'wrap-chimera'
 import contextMenu from "electron-context-menu";
-import path from 'path'
-
 import {nativeImage} from "electron";
 
 
@@ -433,7 +420,7 @@ export default {
             return hms.startsWith('00') ? hms.substr(1) : hms;
         },
         showContext() {
-            if (this.disableContextMenu)
+            if (!this.enableContextMenu)
                 return;
             this.showContextMenu = true;
             setTimeout(() => this.showContextMenu = false, 10);
@@ -681,12 +668,12 @@ export default {
             });
         },
         handleScroll(e) {
-            if (this.disableScroll)
+            if (!this.enableScroll)
                 return;
             this.player.volume -= e.deltaY / 20;
         },
         handleKey(e) {
-            if (this.disableKeys)
+            if (!this.enableKeys)
                 return;
             switch (true) {
                 case e.key === ' ':
@@ -743,7 +730,7 @@ export default {
             return {canceled, filePath: filePaths[0]};
         },
         showStatusText(text, timeout = 2000) {
-            if (!this.enableStatusText || this.preventStatusUpdate)
+            if (!this.enableStatus || this.preventStatusUpdate)
                 return;
             clearTimeout(this.statusTimeout);
             this.statusAnimationDuration = '0.1s';
@@ -1017,9 +1004,6 @@ export default {
         userHeight() {
             return this.height === 0 ? undefined : +this.height;
         },
-        menuIconPath() {
-            return path.join(__static, `/menu-icons/${this.dark ? 'white' : 'black'}/`);
-        },
         volumeIconUrl() {
             let icon = this.muted ? 'volume_off' : this.volume < 1 ? 'volume_down' : 'volume_up';
             return this.iconUrl(icon);
@@ -1091,10 +1075,6 @@ export default {
     background-color: #292929;
     width: 100%;
     height: auto;
-}
-
-.hover {
-    position: absolute;
 }
 
 .controls {
