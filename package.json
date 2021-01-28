@@ -1,6 +1,6 @@
 {
   "name": "vlc-video",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Vue component containing embedded VLC player, can be used in Electron.",
   "main": "src/VlcVideo.vue",
   "scripts": {},

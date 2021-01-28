@@ -23,7 +23,7 @@ when `controls` are enabled they will look similar to Chrome's `<video controls>
 
 ### Screenshot of `<vlc-video controls>` and `<video controls>`
 
-![f](.gh/video-and-vlcvideo.png)
+![f](https://github.com/ruurdbijlsma/vlc-video/blob/master/.gh/video-and-vlcvideo.png?raw=true)
 
 ## Extra features (That aren't in `<video>`)
 
