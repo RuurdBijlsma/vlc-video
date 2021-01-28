@@ -61,6 +61,7 @@
 // node-pre-gyp for WebChimera
 // Chromecast support? lmao nee
 // make into non-vue component
+// fix before-destroy (WrapChimera.destroy)
 
 import {chimera, enums} from 'wrap-chimera'
 import contextMenu from "electron-context-menu";
