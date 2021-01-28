@@ -100,8 +100,11 @@
 // TODO
 // Add more os and electron support to wcjs-prebuilt
 // Make wcjs-prebuilt an NPM package
+// Maybe refactor code, make this less of a huge file
 // dont fire scroll event on media information
 // figure out audio device switching
+// try to get css height and width working
+// node-pre-gyp for WebChimera
 // Chromecast support? lmao nee
 
 import {chimera, enums} from 'wrap-chimera'
