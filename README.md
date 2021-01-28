@@ -11,7 +11,7 @@ Demo Electron app can be found here: https://github.com/RuurdBijlsma/vlc-video-d
 ```html
 
 <template>
-    <vlc-video height="300" controls dark src="http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"/>
+    <vlc-video height="300" width="auto" controls src="http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"/>
 </template>
 
 <script>
@@ -43,6 +43,7 @@ Demo Electron app can be found here: https://github.com/RuurdBijlsma/vlc-video-d
 
 ## Biggest differences with `<video>`
 
+* Both `height` and `width` need to be specified, either by CSS or by HTML props. If you want height and/or width to be determined based on aspect ratio set that HTML property to `'auto'` like so: `<vlc-video height="auto" width="400">`
 * For now only works on Windows x64 and Electron 11 as far as I know, this will probably be fixed in the future
 * This is a Vue component, so some things will work differently, such as events, and programmatically setting certain
   props
@@ -52,8 +53,6 @@ Demo Electron app can be found here: https://github.com/RuurdBijlsma/vlc-video-d
 * `srcObject` and `captureStream` are not supported
 * Subtitles are handled by VLC, add a subtitles track by calling `.addTextTrack(filepath)` on the VlcVideo VueComponent.
   This file can be of any subtitles filetype that VLC supports.
-* The CSS properties `height` and `width` don't affect this player like they do a HTMLVideoElement. `width` and `height`
-  on the element itself do work, for example: `<vlc-video width="500" src="http://example.com/file.mkv">`
 * `picture-in-picture` is not supported
 * Only `'nofullscreen'` of `.controlsList` is supported, this disables the fullscreen button when controls or context
   menu is enabled.
