@@ -9,7 +9,7 @@ when `controls` are enabled they will look similar to Chrome's `<video controls>
 ```html
 
 <template>
-    <vlc-video height="300" controls dark src="http://localhost:3000/file.mkv"/>
+    <vlc-video height="300" controls dark src="http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"/>
 </template>
 
 <script>
