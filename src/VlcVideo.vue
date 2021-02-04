@@ -61,6 +61,7 @@
 // Chromecast support? lmao nee
 // make into non-vue component
 // fix before-destroy (WrapChimera.destroy)
+// fix muted prop
 
 import {chimera, enums} from 'wrap-chimera'
 import contextMenu from "electron-context-menu";
