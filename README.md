@@ -59,10 +59,11 @@ Demo Electron app can be found here: https://github.com/RuurdBijlsma/vlc-video-d
 
 ## Installation
 
-1. `npm install vlc-video`
-2. Make sure `electron`, `vue`, and `RuurdBijlsma/wcjs-prebuilt` are installed alongside this (they are peer
+1. For now VLC needs to be in PATH, in the future libvlc will probably be bundled
+2. `npm install vlc-video`
+3. Make sure `electron`, `vue`, and `RuurdBijlsma/wcjs-prebuilt` are installed alongside this (they are peer
    dependencies)
-3. Make sure `nodeIntegration: true` and `externals: ['wcjs-prebuilt']` are specified in `vue.config.js` as shown below.
+4. Make sure `nodeIntegration: true` and `externals: ['wcjs-prebuilt']` are specified in `vue.config.js` as shown below.
 
 ```js
 module.exports = {
