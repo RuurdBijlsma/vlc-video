@@ -198,10 +198,10 @@ export default {
 
         this.init();
 
-        this.interval = setInterval(() => {
-            if (this.player.state === 'buffering')
-                this.showBuffering();
-        }, 1000 / 50);
+        // this.interval = setInterval(() => {
+        //     if (this.player.state === 'buffering')
+        //         this.showBuffering();
+        // }, 1000 / 50);
         this.resizeInterval = setInterval(() => {
             this.windowResize();
         }, 1000 / 20);
@@ -223,24 +223,17 @@ export default {
 
             this.player.on('play', () => {
                 this.paused = false;
-                if (firstPlay) {
-                    firstPlay = false;
-                } else {
-                    this.$emit('play');
-                }
+                this.$emit('play');
                 this.showStatusText('▶')
             });
             this.player.on('pause', () => {
                 this.paused = true;
-                if (firstPause) {
-                    firstPause = false;
-                } else {
-                    this.$emit('pause');
-                }
+                this.$emit('pause');
                 this.showStatusText('⏸')
             });
             this.player.on('stop', () => {
                 this.paused = true;
+                this.$emit('pause');
                 this.showStatusText('⏹')
             });
             this.player.on('mute', () => {
@@ -276,9 +269,11 @@ export default {
                 this.$emit('loadeddata');
             });
             this.player.on('time', () => {
-                this.dontWatchTime = true;
-                this.currentTime = this.player.time / 1000
-                this.$emit('timeupdate', this.currentTime);
+                let newTime = this.player.time / 1000;
+                if (newTime !== this.currentTime) {
+                    this.dontWatchTime = true;
+                    this.currentTime = newTime;
+                }
             });
             this.player.on('ended', () => {
                 if (this.loop) {
@@ -327,12 +322,13 @@ export default {
                 this.player.on('stateChange', onStateChange);
             });
 
-            let prevState = this.player.state;
+            let currentState = this.player.state;
             this.player.on('stateChange', newState => {
-                if (prevState === 'buffering' && newState === 'play') {
+                console.log('new state', newState)
+                if (currentState === 'buffering' && (newState === 'play' || newState === 'pause')) {
                     this.$emit('playing');
                 }
-                prevState = newState;
+                currentState = newState;
                 if (newState === 'buffering')
                     this.showBuffering();
             });
@@ -924,6 +920,9 @@ export default {
     },
     watch: {
         currentTime(newValue, oldValue) {
+            if (newValue !== oldValue) {
+                this.$emit('timeupdate', newValue);
+            }
             if (newValue !== oldValue && !this.dontWatchTime)
                 this.player.time = this.currentTime * 1000;
             else if (this.dontWatchTime)

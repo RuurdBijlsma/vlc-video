@@ -7,7 +7,7 @@
                      :style="{backgroundImage: `url(${playIconUrl})`}"></div>
                 <div class="time-info" v-if="bounds.width > 95">
                     <span>{{ msToTime(currentTime * 1000) }}</span>
-                    <span v-if="bounds.width > 335 && !isNaN(duration)"> / {{ msToTime(duration * 1000) }}</span>
+                    <span v-if="(bounds.width > 335 || bounds.width < 275 && bounds.width > 100) && !isNaN(duration)"> / {{ msToTime(duration * 1000) }}</span>
                 </div>
             </div>
             <div class="controls-right">
@@ -225,7 +225,6 @@ export default {
 .controls-bottom {
     cursor: pointer;
     padding: 5px 25px;
-    width: calc(100% - 50px);
 }
 
 .controls-bottom > * {
