@@ -703,7 +703,7 @@ export default {
             }
 
             this.player.playUrl(this.src);
-            this.$on('play', () => {
+            this.$once('play', () => {
                 this.firstPlayLoaded = true
             });
             this.$emit('loadstart');
