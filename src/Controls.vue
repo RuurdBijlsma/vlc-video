@@ -80,9 +80,6 @@ export default {
             default: false,
         },
     },
-    data: () => ({
-        fullscreen: false,
-    }),
     beforeDestroy() {
         document.removeEventListener('mousemove', this.controlsMove);
         document.removeEventListener('mouseup', this.controlsUp);
